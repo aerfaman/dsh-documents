@@ -1,6 +1,6 @@
 {
   "name": "dsh-documents",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Session-linked document library for DSH Desktop: in-app Markdown viewer, zoom, provenance and edit history.",
   "type": "module",
   "license": "MIT",
