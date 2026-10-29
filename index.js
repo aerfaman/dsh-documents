@@ -19,6 +19,10 @@ const RENAME_FILE = path.join(os.homedir(), '.dsh', 'documents-renames.json')
 const PREVIEW_LIMIT = 400 * 1024
 const MAX_DOCUMENTS = 800
 const DOCS_CACHE_MS = 15000
+/** Session logs read in parallel per chunk; the scan streams one batch per chunk. */
+const SESSION_CHUNK = 4
+/** How many list revisions stay addressable, so a client can still ask for a delta. */
+const SNAPSHOT_HISTORY = 4
 
 const KINDS = [
   { id: 'word', color: '#2b579a', exts: ['doc', 'docx', 'docm', 'rtf', 'odt', 'pages'] },
@@ -53,9 +57,11 @@ const WRITE_TOOLS = new Set([
 const PATH_ARG_KEYS = ['path', 'file_path', 'filePath', 'target_file', 'file']
 
 
-let docsCache = { at: 0, key: '', value: null }
+let docsCache = { at: 0, key: '', value: null, snapshot: null, rev: '' }
 let renameMap = null
 const sessionCache = new Map()
+/** Recent list snapshots, keyed by revision, so a polling client can receive a delta. */
+const snapshotHistory = new Map()
 
 /**
  * Renames performed through this plugin are remembered because session events
@@ -302,75 +308,143 @@ function extractSessionFiles(events, sessionCwd) {
   return out
 }
 
-async function sessionRecords(ctx, signal) {
+/**
+ * Read one session log, reusing the extraction cache while its revision is stable.
+ * Returns null for a session whose log cannot be read.
+ */
+async function readSessionRecord(query, persistence, record, titles, signal) {
+  const header = record?.header
+  if (!header || typeof header.cwd !== 'string') return null
+  const id = String(header.id)
+  let revision = ''
+  if (persistence && typeof persistence.stat === 'function') {
+    try {
+      const stat = await persistence.stat(header.id, { signal })
+      revision = String(stat?.revision ?? '')
+    } catch {
+      revision = ''
+    }
+  }
+  let cached = sessionCache.get(id)
+  if (cached === undefined || cached.revision !== revision) {
+    let snapshot
+    try {
+      snapshot = await query.readSession(header.id)
+    } catch {
+      return null
+    }
+    const events = Array.isArray(snapshot?.events) ? snapshot.events : []
+    cached = {
+      revision,
+      header,
+      files: extractSessionFiles(events, header.cwd),
+    }
+    sessionCache.set(id, cached)
+  }
+  return {
+    id,
+    header,
+    title: titles.get(id) || '',
+    files: cached.files,
+  }
+}
+
+/**
+ * Walk every session log in small parallel chunks.
+ *
+ * Reading a log is by far the expensive step (36 logs / ~24 MB here), so callers
+ * that paint progressively can yield a batch after each chunk instead of waiting
+ * for the whole scan. Cached sessions skip `readSession` entirely, which makes a
+ * refresh cheap once the library has been loaded once.
+ */
+async function* iterateSessionRecords(ctx, signal) {
   const query = ctx.get('sessionQuery')
   const persistence = ctx.get('sessionPersistence')
   if (!query || typeof query.listSessions !== 'function' || typeof query.readSession !== 'function') {
     throw new Error('会话查询服务不可用')
   }
   const records = await query.listSessions(signal)
-  let titles = new Map()
+  const titles = new Map()
   try {
-    const observed = await query.readTitleSnapshots(records.map((record) => record.header.id), signal)
+    const ids = records.map((record) => record?.header?.id).filter((id) => id !== undefined && id !== null)
+    const observed = await query.readTitleSnapshots(ids, signal)
     for (const item of observed) {
       if (item && item.status === 'fulfilled' && item.value && item.value.title) {
         titles.set(String(item.sessionId), String(item.value.title.title ?? ''))
       }
     }
   } catch {
-    titles = new Map()
+    // Titles are decoration; a scan without them is still useful.
   }
-  const out = []
-  for (const record of records) {
-    const header = record.header
-    if (!header || typeof header.cwd !== 'string') continue
-    const id = String(header.id)
-    let revision = ''
-    if (persistence && typeof persistence.stat === 'function') {
-      try {
-        const stat = await persistence.stat(header.id, { signal })
-        revision = String(stat?.revision ?? '')
-      } catch {
-        revision = ''
-      }
+  for (let index = 0; index < records.length; index += SESSION_CHUNK) {
+    const slice = records.slice(index, index + SESSION_CHUNK)
+    const settled = await Promise.all(
+      slice.map((record) => readSessionRecord(query, persistence, record, titles, signal)),
+    )
+    yield {
+      sessions: settled.filter((entry) => entry !== null),
+      scanned: Math.min(index + slice.length, records.length),
+      total: records.length,
     }
-    let cached = sessionCache.get(id)
-    if (cached === undefined || cached.revision !== revision) {
-      let snapshot
-      try {
-        snapshot = await query.readSession(header.id)
-      } catch {
-        continue
-      }
-      const events = Array.isArray(snapshot?.events) ? snapshot.events : []
-      cached = {
-        revision,
-        header,
-        files: extractSessionFiles(events, header.cwd),
-      }
-      sessionCache.set(id, cached)
-    }
-    out.push({
-      id,
-      header,
-      title: titles.get(id) || '',
-      files: cached.files,
-    })
   }
-  return out
 }
 
 function kindOf(ext) {
   return KIND_BY_EXT.get(ext)
 }
 
-async function collectDocuments(ctx, config, signal) {
-  const roots = rootsFor(ctx, config)
-  const renames = await loadRenames()
-  const sessions = await sessionRecords(ctx, signal)
-  const relevant = sessions.filter((session) => insideRoots(path.resolve(session.header.cwd), roots))
+/**
+ * Identity of one document row. Any change here means the client must be told
+ * about the document again on the next incremental refresh.
+ */
+function fingerprintOf(doc) {
+  return `${doc.mtime}|${doc.bytes}|${doc.sessionCount}|${doc.editCount}|${doc.lastTime}`
+}
+
+function snapshotOf(documents) {
+  const snapshot = new Map()
+  for (const doc of documents) snapshot.set(doc.path.toLowerCase(), fingerprintOf(doc))
+  return snapshot
+}
+
+/**
+ * Stable hash of a document set, used as the delta cursor. Kept deterministic so
+ * a client revision stays meaningful after the host restarts.
+ */
+function revisionOf(snapshot) {
+  let hash = 0x811c9dc5
+  for (const key of [...snapshot.keys()].sort()) {
+    const line = `${key}=${snapshot.get(key)}\n`
+    for (let index = 0; index < line.length; index += 1) {
+      hash ^= line.charCodeAt(index)
+      hash = Math.imul(hash, 0x01000193) >>> 0
+    }
+  }
+  return hash.toString(16).padStart(8, '0')
+}
+
+async function statDocument(filePath, cache) {
+  if (cache.has(filePath)) return cache.get(filePath)
+  let info = null
+  try {
+    const stat = await fs.stat(filePath)
+    if (stat.isFile()) info = { size: stat.size, mtime: stat.mtimeMs }
+  } catch {
+    info = null
+  }
+  cache.set(filePath, info)
+  return info
+}
+
+/**
+ * Turn session file events into the public document shape.
+ *
+ * `statCache` keeps the stat cost flat while a streaming caller re-runs this for
+ * every chunk, and an unreadable file simply drops out of the library.
+ */
+async function buildDocuments(sessions, roots, renames, statCache) {
   const byPath = new Map()
-  for (const session of relevant) {
+  for (const session of sessions) {
     const rootInfo = rootForPath(path.resolve(session.header.cwd), roots)
     for (const file of session.files) {
       const sourcePath = path.resolve(file.path)
@@ -426,13 +500,8 @@ async function collectDocuments(ctx, config, signal) {
 
   const documents = []
   for (const doc of byPath.values()) {
-    let info
-    try {
-      info = await fs.stat(doc.path)
-    } catch {
-      continue
-    }
-    if (!info.isFile()) continue
+    const info = await statDocument(doc.path, statCache)
+    if (info === null) continue
     const entries = [...doc.sessions.values()]
     for (const entry of entries) entry.events.sort((a, b) => a.seq - b.seq)
     entries.sort((a, b) => {
@@ -451,7 +520,7 @@ async function collectDocuments(ctx, config, signal) {
       rootTitle: doc.rootTitle,
       rel: doc.rel,
       bytes: info.size,
-      mtime: info.mtimeMs,
+      mtime: info.mtime,
       firstTime: doc.firstTime,
       lastTime: doc.lastTime,
       sessionCount: entries.length,
@@ -470,6 +539,20 @@ async function collectDocuments(ctx, config, signal) {
     })
   }
   documents.sort((a, b) => b.lastTime - a.lastTime)
+  return documents
+}
+
+/** Collect the whole library in one pass (agent tool, JSON endpoint). */
+async function collectDocuments(ctx, config, signal) {
+  const roots = rootsFor(ctx, config)
+  const renames = await loadRenames()
+  const relevant = []
+  for await (const chunk of iterateSessionRecords(ctx, signal)) {
+    for (const session of chunk.sessions) {
+      if (insideRoots(path.resolve(session.header.cwd), roots)) relevant.push(session)
+    }
+  }
+  const documents = await buildDocuments(relevant, roots, renames, new Map())
   return {
     roots,
     documents: documents.slice(0, MAX_DOCUMENTS),
@@ -486,12 +569,55 @@ async function listDocuments(ctx, config) {
     return docsCache.value
   }
   const value = await collectDocuments(ctx, config)
-  docsCache = { key, at: now, value }
+  const snapshot = snapshotOf(value.documents)
+  const rev = revisionOf(snapshot)
+  docsCache = { key, at: now, value, snapshot, rev }
+  rememberSnapshot(rev, snapshot)
   return value
 }
 
+function rememberSnapshot(rev, snapshot) {
+  snapshotHistory.delete(rev)
+  snapshotHistory.set(rev, snapshot)
+  while (snapshotHistory.size > SNAPSHOT_HISTORY) {
+    const oldest = snapshotHistory.keys().next().value
+    if (oldest === undefined) break
+    snapshotHistory.delete(oldest)
+  }
+}
+
+/**
+ * Answer an incremental refresh: only the documents that appeared, changed, or
+ * vanished since the caller's revision. When that revision has fallen out of the
+ * retained history (or the host restarted), the full list is resent once.
+ */
+async function listDelta(ctx, config, since) {
+  const value = await listDocuments(ctx, config)
+  const snapshot = docsCache.snapshot ?? snapshotOf(value.documents)
+  const rev = docsCache.rev || revisionOf(snapshot)
+  const base = { sessionCount: value.sessionCount, truncated: value.truncated }
+  if (since === rev) return { ok: true, unchanged: true, rev, ...base }
+  const previous = snapshotHistory.get(since)
+  if (previous === undefined) {
+    return { ok: true, full: true, rev, documents: value.documents, ...base }
+  }
+  const added = []
+  const updated = []
+  for (const doc of value.documents) {
+    const key = doc.path.toLowerCase()
+    const before = previous.get(key)
+    if (before === undefined) added.push(doc)
+    else if (before !== snapshot.get(key)) updated.push(doc)
+  }
+  const removed = []
+  for (const key of previous.keys()) {
+    if (!snapshot.has(key)) removed.push(key)
+  }
+  return { ok: true, rev, added, updated, removed, ...base }
+}
+
 function invalidateCache() {
-  docsCache = { at: 0, key: '', value: null }
+  docsCache = { at: 0, key: '', value: null, snapshot: null, rev: '' }
 }
 
 async function readPreview(target, roots) {
@@ -725,6 +851,70 @@ async function serveRaw(req, res, url, ctx, config) {
   createReadStream(resolved, { start, end }).pipe(res)
 }
 
+/**
+ * Stream the library as NDJSON.
+ *
+ * One `docs` event per scanned chunk means the panel can paint the documents it
+ * already knows about while the remaining session logs are still being read,
+ * instead of staring at a skeleton for the whole scan.
+ */
+async function serveListStream(req, res, ctx, config) {
+  res.writeHead(200, {
+    'content-type': 'application/x-ndjson; charset=utf-8',
+    'cache-control': 'no-store',
+    'x-accel-buffering': 'no',
+  })
+  const controller = new AbortController()
+  const abort = () => controller.abort()
+  res.on('close', abort)
+  const write = (event) => {
+    if (res.writableEnded === true) return
+    res.write(JSON.stringify(event) + '\n')
+  }
+  try {
+    const roots = rootsFor(ctx, config)
+    const renames = await loadRenames()
+    const statCache = new Map()
+    const relevant = []
+    const emitted = new Map()
+    let documents = []
+    let sessionCount = 0
+    for await (const chunk of iterateSessionRecords(ctx, controller.signal)) {
+      for (const session of chunk.sessions) {
+        if (insideRoots(path.resolve(session.header.cwd), roots)) relevant.push(session)
+      }
+      sessionCount = relevant.length
+      documents = await buildDocuments(relevant, roots, renames, statCache)
+      const changed = []
+      for (const doc of documents) {
+        const key = doc.path.toLowerCase()
+        const fingerprint = fingerprintOf(doc)
+        if (emitted.get(key) === fingerprint) continue
+        if (!emitted.has(key) && emitted.size >= MAX_DOCUMENTS) continue
+        emitted.set(key, fingerprint)
+        changed.push(doc)
+      }
+      write({ t: 'docs', documents: changed, scanned: chunk.scanned, sessions: chunk.total, sessionCount })
+    }
+    const rev = revisionOf(emitted)
+    const truncated = documents.length > MAX_DOCUMENTS
+    docsCache = {
+      key: roots.map((root) => root.path).join('|'),
+      at: Date.now(),
+      value: { roots, documents: documents.slice(0, MAX_DOCUMENTS), truncated, sessionCount },
+      snapshot: emitted,
+      rev,
+    }
+    rememberSnapshot(rev, emitted)
+    write({ t: 'done', rev, sessionCount, total: documents.length, limit: MAX_DOCUMENTS, truncated })
+  } catch (error) {
+    write({ t: 'error', error: messageOf(error) })
+  } finally {
+    res.off('close', abort)
+    if (res.writableEnded !== true) res.end()
+  }
+}
+
 function createHandler(ctx, config) {
   return async function handleDocumentsRequest(req, res) {
     try {
@@ -738,8 +928,17 @@ function createHandler(ctx, config) {
 
       if (req.method === 'GET' || req.method === 'HEAD') {
         if (route === '/list') {
+          const since = url.searchParams.get('since')
+          if (since !== null && since !== '') {
+            sendJson(res, 200, await listDelta(ctx, config, since))
+            return
+          }
+          if (url.searchParams.get('stream') === '1' && req.method !== 'HEAD') {
+            await serveListStream(req, res, ctx, config)
+            return
+          }
           const result = await listDocuments(ctx, config)
-          sendJson(res, 200, { ok: true, ...result })
+          sendJson(res, 200, { ok: true, rev: docsCache.rev, ...result })
           return
         }
         if (route === '/preview') {

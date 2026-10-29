@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
       'count': 'documents',
       'sessionCount': 'sessions',
       'refresh': 'Refresh',
-      'refresh.auto': 'Auto-refresh every 60s',
+      'refresh.auto': 'Auto-refresh every 60s · changes only',
       'search': 'Search document, folder, or session',
       'filter.all': 'All',
       'sort.recent': 'Recently active',
@@ -21,6 +21,7 @@ window.__ModuleLoader__.load({
       'sort.size': 'Largest first',
       'workspace.all': 'All workspaces',
       'loading': 'Loading documents…',
+      'loading.partial': 'Still scanning sessions… {count} shown',
       'empty.title': 'No session documents yet',
       'empty.body': 'When a DSH session writes, edits, or presents a document in a workspace, it appears here with its originating session.',
       'empty.filtered': 'No documents match this filter.',
@@ -91,7 +92,7 @@ window.__ModuleLoader__.load({
       'count': '个文档',
       'sessionCount': '个会话',
       'refresh': '刷新',
-      'refresh.auto': '每 60 秒自动刷新',
+      'refresh.auto': '每 60 秒增量刷新',
       'search': '搜索文档、文件夹或会话',
       'filter.all': '全部',
       'sort.recent': '最近活动',
@@ -99,6 +100,7 @@ window.__ModuleLoader__.load({
       'sort.size': '从大到小',
       'workspace.all': '全部工作区',
       'loading': '正在加载文档…',
+      'loading.partial': '正在继续扫描会话…已显示 {count} 个',
       'empty.title': '还没有会话文档',
       'empty.body': 'DSH 会话在工作区写入、编辑或交付文档后，会连同来源会话一起显示在这里。',
       'empty.filtered': '没有符合当前筛选的文档。',
@@ -172,6 +174,9 @@ window.__ModuleLoader__.load({
       text: '#5b6472',
     }
     const REFRESH_MS = 60 * 1000
+    // Survives a remount (switching panels and coming back): the list paints from
+    // the last known state and a delta refresh runs behind it.
+    const panelState = { documents: [], sessionCount: 0, revision: '' }
 
     const CSS = `
       .dshdoc-page {
@@ -595,9 +600,9 @@ window.__ModuleLoader__.load({
       const t = typeof props.t === 'function' ? props.t : translateWith(EN)
       const jumpToSession = props.jumpToSession
 
-      const [documents, setDocuments] = React.useState([])
-      const [sessionCount, setSessionCount] = React.useState(0)
-      const [loading, setLoading] = React.useState(true)
+      const [documents, setDocuments] = React.useState(() => panelState.documents)
+      const [sessionCount, setSessionCount] = React.useState(() => panelState.sessionCount)
+      const [loading, setLoading] = React.useState(() => panelState.documents.length === 0)
       const [error, setError] = React.useState(null)
       const [truncated, setTruncated] = React.useState(false)
       const [query, setQuery] = React.useState('')
@@ -612,6 +617,7 @@ window.__ModuleLoader__.load({
       const [preview, setPreview] = React.useState(null)
       const [previewEpoch, setPreviewEpoch] = React.useState(0)
       const [refreshing, setRefreshing] = React.useState(false)
+      const [streaming, setStreaming] = React.useState(false)
       const [busy, setBusy] = React.useState(false)
       const [toast, setToast] = React.useState(null)
       const [dialog, setDialog] = React.useState(null)
@@ -624,6 +630,8 @@ window.__ModuleLoader__.load({
       const inFlight = React.useRef(false)
       const previewCache = React.useRef(new Map())
       const reloadTimer = React.useRef(null)
+      /** Server revision of the list currently on screen; '' forces a full reload. */
+      const revision = React.useRef(panelState.revision)
 
       React.useEffect(() => {
         alive.current = true
@@ -634,12 +642,115 @@ window.__ModuleLoader__.load({
         }
       }, [])
 
+      React.useEffect(() => {
+        panelState.documents = documents
+        panelState.sessionCount = sessionCount
+        panelState.revision = revision.current
+      }, [documents, sessionCount])
+
       const showToast = React.useCallback((text, isError) => {
         setToast({ text, isError: isError === true })
         if (toastTimer.current !== null) window.clearTimeout(toastTimer.current)
         toastTimer.current = window.setTimeout(() => {
           if (alive.current) setToast(null)
         }, 4200)
+      }, [])
+
+      /**
+       * Read the whole library as a stream of NDJSON batches.
+       *
+       * The host scans session logs in chunks and pushes one `docs` event per
+       * chunk, so rows land on screen while the remaining logs are still being
+       * read. Returning early (unmount, newer load) cancels the reader.
+       */
+      const loadStream = React.useCallback(async (ticket) => {
+        const response = await fetch(API + '/list?stream=1', {
+          cache: 'no-store',
+          headers: { 'x-dsh-documents': '1' },
+        })
+        if (!response.ok || response.body === null) throw new Error(`HTTP ${response.status}`)
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        const collected = new Map()
+        let buffer = ''
+        let painted = false
+        let final = null
+        const paint = () => {
+          if (!alive.current || ticket !== loadId.current) return false
+          setDocuments([...collected.values()])
+          if (!painted) {
+            painted = true
+            setLoading(false)
+          }
+          return true
+        }
+        try {
+          for (;;) {
+            const step = await reader.read()
+            if (step.done) break
+            buffer += decoder.decode(step.value, { stream: true })
+            let newline = buffer.indexOf('\n')
+            while (newline !== -1) {
+              const line = buffer.slice(0, newline).trim()
+              buffer = buffer.slice(newline + 1)
+              newline = buffer.indexOf('\n')
+              if (line === '') continue
+              let event
+              try {
+                event = JSON.parse(line)
+              } catch {
+                continue
+              }
+              if (event.t === 'docs') {
+                if (!Array.isArray(event.documents)) continue
+                for (const doc of event.documents) collected.set(doc.path.toLowerCase(), doc)
+                // Paint only once there is something to show: an empty first chunk
+                // must not flash the "no documents" state.
+                if (event.documents.length > 0 && !paint()) return
+                if (typeof event.sessionCount === 'number') setSessionCount(event.sessionCount)
+              } else if (event.t === 'done') {
+                final = event
+              } else if (event.t === 'error') {
+                throw new Error(String(event.error || 'list failed'))
+              } else if (event.ok === true && Array.isArray(event.documents)) {
+                // Host without streaming support answered with the plain JSON shape.
+                for (const doc of event.documents) collected.set(doc.path.toLowerCase(), doc)
+                if (!paint()) return
+              }
+            }
+          }
+        } finally {
+          reader.cancel().catch(() => {})
+        }
+        if (!alive.current || ticket !== loadId.current) return
+        if (final !== null) {
+          revision.current = typeof final.rev === 'string' ? final.rev : ''
+          panelState.revision = revision.current
+          setSessionCount(typeof final.sessionCount === 'number' ? final.sessionCount : collected.size)
+          setTruncated(final.truncated === true)
+          const limit = typeof final.limit === 'number' ? final.limit : 0
+          if (limit > 0 && collected.size > limit) {
+            setDocuments([...collected.values()].slice(0, limit))
+          }
+        }
+        if (!painted) setDocuments([...collected.values()])
+        setLoading(false)
+      }, [])
+
+      /** Apply an incremental refresh: only rows that appeared, changed, or vanished. */
+      const mergeDelta = React.useCallback((data) => {
+        const added = Array.isArray(data.added) ? data.added : []
+        const updated = Array.isArray(data.updated) ? data.updated : []
+        const removed = Array.isArray(data.removed) ? data.removed : []
+        if (added.length === 0 && updated.length === 0 && removed.length === 0) return false
+        setDocuments((current) => {
+          const map = new Map(current.map((doc) => [doc.path.toLowerCase(), doc]))
+          for (const doc of added) map.set(doc.path.toLowerCase(), doc)
+          for (const doc of updated) map.set(doc.path.toLowerCase(), doc)
+          for (const key of removed) map.delete(String(key).toLowerCase())
+          return [...map.values()]
+        })
+        return true
       }, [])
 
       const load = React.useCallback(async (options) => {
@@ -653,27 +764,48 @@ window.__ModuleLoader__.load({
         if (!force && lastLoaded.current !== 0 && now - lastLoaded.current < REFRESH_MS) return
         const ticket = ++loadId.current
         inFlight.current = true
+        const full = revision.current === ''
+        if (full) setStreaming(true)
         if (!silent) setLoading(true)
         setError(null)
         try {
-          const data = await requestJson('/list')
-          if (!alive.current || ticket !== loadId.current) return
-          const next = Array.isArray(data.documents) ? data.documents : []
-          setDocuments(next)
-          setSessionCount(typeof data.sessionCount === 'number' ? data.sessionCount : 0)
-          setTruncated(data.truncated === true)
+          if (full) {
+            await loadStream(ticket)
+          } else {
+            const data = await requestJson('/list?since=' + encodeURIComponent(revision.current))
+            if (!alive.current || ticket !== loadId.current) return
+            if (data.full === true) {
+              revision.current = typeof data.rev === 'string' ? data.rev : ''
+              panelState.revision = revision.current
+              setDocuments(Array.isArray(data.documents) ? data.documents : [])
+            } else {
+              if (typeof data.rev === 'string' && data.rev !== '') {
+                revision.current = data.rev
+                panelState.revision = data.rev
+              }
+              if (data.unchanged !== true) mergeDelta(data)
+            }
+            if (typeof data.sessionCount === 'number') setSessionCount(data.sessionCount)
+            setTruncated(data.truncated === true)
+            setLoading(false)
+          }
           lastLoaded.current = Date.now()
-          setLoading(false)
-          setViewerPath((current) => (current !== null && next.some((doc) => doc.path === current) ? current : null))
         } catch (loadError) {
           if (!alive.current || ticket !== loadId.current) return
           setError(String((loadError && loadError.message) || loadError))
           setLoading(false)
+          if (full) {
+            revision.current = ''
+            panelState.revision = ''
+          }
         } finally {
           inFlight.current = false
-          if (alive.current) setRefreshing(false)
+          if (alive.current) {
+            setRefreshing(false)
+            setStreaming(false)
+          }
         }
-      }, [])
+      }, [loadStream, mergeDelta])
 
       const refreshNow = React.useCallback(() => {
         previewCache.current.clear()
@@ -708,6 +840,13 @@ window.__ModuleLoader__.load({
         }, REFRESH_MS)
         return () => window.clearInterval(timer)
       }, [load])
+
+      // A delta refresh can drop the document that was open (rename, trash, delete).
+      React.useEffect(() => {
+        if (loading || streaming) return
+        if (viewerPath === null) return
+        if (!documents.some((doc) => doc.path === viewerPath)) setViewerPath(null)
+      }, [documents, viewerPath, loading, streaming])
 
       const selected = React.useMemo(
         () => documents.find((doc) => doc.path === viewerPath) || null,
@@ -1175,6 +1314,13 @@ window.__ModuleLoader__.load({
             h('div', { className: 'dshdoc-empty-body', style: { padding: '14px 12px 0' } }, t('empty.filtered')),
           )
         }
+      }
+
+      if (streaming && documents.length > 0) {
+        listContent = h(React.Fragment, null, listContent,
+          h('div', { className: 'dshdoc-empty-body', style: { padding: '12px 12px 0' } },
+            String(t('loading.partial') || '').replace('{count}', String(documents.length))),
+        )
       }
 
       const sidePanel = h('div', { className: 'dshdoc-side', 'data-open': String(listOpen) },

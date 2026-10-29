@@ -31,7 +31,9 @@ DSH Desktop 插件：把**会话生成、编辑或交付过的文档**集中起�
 - 侧边栏「文档」图标打开文档库。
 - **左侧始终保留文档列表**，右侧是查看器；点击列表中的另一个文档即可直接切换查看。
 - 列表按最近活动排序，显示创建会话、更新时间；可按类型 / 工作区筛选，按名称、文件夹、会话标题搜索。
-- **缓存与刷新**：列表和文档预览都会缓存在页面内，打开 / 切换文档不会重新请求；列表每 **60 秒**自动后台刷新一次（仅页面可见时），窗口重新聚焦时只有在缓存过期后才刷新。右上角「刷新」按钮可立即强制刷新并清空预览缓存。
+- **渐进加载**：列表按会话日志分块返回（NDJSON 流），先扫完的文档先显示，其余在后台继续扫描，底部提示「正在继续扫描会话…已显示 N 个」，不必等全部会话日志读完。
+- **增量刷新**：列表每 **60 秒**后台刷新一次（仅页面可见时），只回传新增 / 变化 / 删除的文档，没有变化时完全不重绘；窗口重新聚焦时只有在缓存过期后才刷新。右上角「刷新」按钮强制刷新并清空预览缓存。
+- **缓存**：文档预览缓存在页面内，打开 / 切换文档不会重新请求。
 - 重命名后的文件会记录映射并在列表中保留（映射存放在 `~/.dsh/documents-renames.json`），不会因为会话日志里还是旧路径而消失。
 - 查看器：
   - Markdown 默认**阅读模式**（渲染标题、列表、表格、代码块、链接），可切换源码。
@@ -134,7 +136,9 @@ npm run pack:dry    # 查看 npm 包内容
 
 ## 本地接口
 
-- `GET /dsh-documents/api/list` — `{ documents, sessionCount, truncated }`
+- `GET /dsh-documents/api/list` — `{ documents, sessionCount, truncated, rev }`
+- `GET /dsh-documents/api/list?stream=1` — NDJSON：每扫完一块会话输出一行 `{ t: "docs", documents, scanned, sessions, sessionCount }`，结束为 `{ t: "done", rev, total, limit, truncated }`
+- `GET /dsh-documents/api/list?since=<rev>` — 增量：`{ rev, added, updated, removed }`；无变化返回 `{ unchanged: true }`；`rev` 不在保留的历史里（宿主重启或落后太多）返回 `{ full: true, documents }`
 - `GET /dsh-documents/api/preview?path=...` — 文本预览
 - `GET /dsh-documents/api/raw?path=...` — 图片 / PDF 内嵌流（支持 Range）
 - `POST /dsh-documents/api/action` — `{ action: "open" | "reveal" | "rename" | "trash", path, name? }`
@@ -146,3 +150,4 @@ POST 需要 `x-dsh-documents: 1`；所有路径先做 realpath 校验，必须�
 - 包名切换为 `dsh-documents` 后重新安装成功，插件行 active，`/list` 返回 31 个会话文档 / 32 个会话。
 - 客户端 bundle 以 `dsh-documents` 模块 id 正常下发。
 - `npm run check` 与 `npm pack --dry-run` 通过，tarball 包含全部运行文件（9 个）。
+- 列表改为「分块流式 + 增量」：用桩 ctx 验证 8 个会话分 2 批、40 个文档（首批 20 个先上屏）；增量接口正确返回 `added` / `updated` / `removed`，无变化返回 `unchanged`，过期 revision 回退 `full`；同一套逻辑经真实 HTTP 流式读回一致。
