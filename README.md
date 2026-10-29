@@ -74,7 +74,7 @@ DSH Desktop 插件：把**会话生成、编辑或交付过的文档**集中起�
    - Organization or user：`aerfaman`
    - Repository：`dsh-documents`
    - Workflow filename：`release.yml`（必须与 `.github/workflows/release.yml` 同名）
-   - Environment：留空（除非 workflow 里也写了同名的 `environment:`）
+   - Environment：`release`（**必须**与 workflow 里的 `environment: release` 完全一致；两边不一致时 registry 的 OIDC 交换会返回 404，npm 随后静默退回传统认证并报 `ENEEDAUTH / npm login`）
 3. **不要**再配置 `NPM_TOKEN` / `NODE_AUTH_TOKEN`：npm 一旦发现 token 就会放弃 OIDC，退回 token 认证。
 4. 仓库 **Settings → Actions → General → Workflow permissions** 勾选 `Read and write`（创建 Release 需要 `contents: write`，workflow 内已声明 `permissions`）。
 5. workflow 里 `actions/setup-node` **不要**加 `registry-url`（它会写入 `${NODE_AUTH_TOKEN}` 的 `.npmrc`），registry 由 `package.json` 的 `publishConfig.registry` 决定。
@@ -90,8 +90,9 @@ git push origin main  # 或者 git push --follow-tags，同时推 v* tag
 
 1. `npm run check` 校验包结构；
 2. 查 npm 上是否已有该版本：**已有 → 跳过发布**（所以只推代码、没改版本号不会失败）；
-3. 版本是新的 → `npm publish --provenance --access public`（OIDC 换短期凭证，provenance 自动生成）；
-4. 该 tag 还没有 GitHub Release → `npm pack` 并把 `.tgz` 附到 Release，同时创建 `v<version>` tag。
+3. preflight：用 GitHub OIDC token 走一遍 npm 的 token 交换，失败时打出 registry 的真实状态码和原因，而不是 npm 那句含糊的 `ENEEDAUTH`；
+4. 版本是新的 → `npm publish --provenance --access public`（OIDC 换短期凭证，provenance 自动生成）；
+5. 该 tag 还没有 GitHub Release → `npm pack` 并把 `.tgz` 附到 Release，同时创建 `v<version>` tag。
 
 补充：
 
