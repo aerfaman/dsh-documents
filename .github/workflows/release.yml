@@ -1,14 +1,21 @@
 name: Release
 
+# 推送到 main（或打 v* tag）时自动发布：
+# - 版本号已在 npm 上存在 → 只做校验，不重复发布；
+# - 版本号是新的 → npm publish（npm trusted publishing / OIDC，无 token）+ GitHub Release。
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [main]
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
-  contents: write
-  id-token: write
+  contents: write # 创建 GitHub Release
+  id-token: write # trusted publishing：向 npm 换取 OIDC token，并自动生成 provenance
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   publish:
@@ -16,28 +23,88 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 不要用 registry-url：actions/setup-node 会写入
+      # //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}，而 trusted publishing
+      # 要求完全没有 token，否则 npm 会退回 token 认证而不用 OIDC。
+      # 仓库地址来自 package.json 的 publishConfig.registry。
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          registry-url: https://registry.npmjs.org
+          node-version: 24
+
+      - name: Ensure npm CLI supports trusted publishing
+        run: |
+          npm install --global npm@latest
+          version="$(npm --version)"
+          if [ "$(printf '%s\n' 11.5.1 "$version" | sort -V | head -n1)" != "11.5.1" ]; then
+            echo "::error::npm $version is too old; trusted publishing requires npm >= 11.5.1"
+            exit 1
+          fi
+          echo "npm $version supports trusted publishing"
+
+      - name: Read package metadata
+        id: meta
+        run: |
+          node -e '
+            const { appendFileSync } = require("node:fs")
+            const pkg = require("./package.json")
+            appendFileSync(process.env.GITHUB_OUTPUT, `name=${pkg.name}\nversion=${pkg.version}\n`)
+            console.log(`package: ${pkg.name}@${pkg.version}`)
+          '
 
       - name: Verify tag matches package version
+        if: github.ref_type == 'tag'
         run: |
-          node -e "const p=require('./package.json');const t=process.env.GITHUB_REF_NAME.replace(/^v/,'');if(p.version!==t){console.error('Tag '+t+' does not match package version '+p.version);process.exit(1)}"
+          node -e '
+            const pkg = require("./package.json")
+            const tag = process.env.GITHUB_REF_NAME.replace(/^v/, "")
+            if (pkg.version !== tag) {
+              console.error(`tag ${tag} does not match package version ${pkg.version}`)
+              process.exit(1)
+            }
+          '
 
       - name: Verify package shape
         run: npm run check
 
+      - name: Check whether this version is already on npm
+        id: registry
+        run: |
+          if npm view "${{ steps.meta.outputs.name }}@${{ steps.meta.outputs.version }}" version >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::${{ steps.meta.outputs.name }}@${{ steps.meta.outputs.version }} is already on npm — skipping publish"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::${{ steps.meta.outputs.name }}@${{ steps.meta.outputs.version }} is new — will publish"
+          fi
+
       - name: Publish to npm
-        run: npm publish --provenance --access public
+        if: steps.registry.outputs.published == 'false'
+        # trusted publishing：不传 NODE_AUTH_TOKEN / NPM_TOKEN，npm 用 id-token 换短期凭证，
+        # provenance 自动生成（--provenance 可省略，这里显式写出便于排查）。
+        run: npm publish --access public --provenance
+
+      - name: Check whether the GitHub Release already exists
+        id: release
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "v${{ steps.meta.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::release v${{ steps.meta.outputs.version }} already exists — skipping"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Pack release tarball
+        if: steps.release.outputs.exists == 'false'
         run: npm pack
 
       - name: Create GitHub Release
+        if: steps.release.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ steps.meta.outputs.version }}
+          target_commitish: ${{ github.sha }}
           files: '*.tgz'
           generate_release_notes: true
+          fail_on_unmatched_files: true

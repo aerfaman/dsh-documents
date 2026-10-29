@@ -67,35 +67,38 @@ DSH Desktop 插件：把**会话生成、编辑或交付过的文档**集中起�
 
 ### 一次性准备
 
-1. 在 npmjs.com 建账号，生成 **Automation** token。
-2. 在 GitHub 创建仓库 `dsh-documents`（公开），然后：
+使用 **npm trusted publishing（OIDC）**：GitHub 里不存任何 npm token，凭据由 Actions 的 `id-token` 现换现用，provenance 自动生成。
 
-```bash
-git init
-git add .
-git commit -m "feat: session-linked document library"
-git branch -M main
-git remote add origin https://github.com/aerfaman/dsh-documents.git
-git push -u origin main
-```
-
-3. 仓库 **Settings → Secrets and variables → Actions → New repository secret**，添加 `NPM_TOKEN`（npm Automation token）。
+1. 包已存在于 npm（trusted publishing 不能创建新包，首次发布需手动；`dsh-documents@1.0.0` 已发布）。
+2. npmjs.com → 该包 → **Settings → Trusted publishing** → 添加 **GitHub Actions**：
+   - Organization or user：`aerfaman`
+   - Repository：`dsh-documents`
+   - Workflow filename：`release.yml`（必须与 `.github/workflows/release.yml` 同名）
+   - Environment：留空（除非 workflow 里也写了同名的 `environment:`）
+3. **不要**再配置 `NPM_TOKEN` / `NODE_AUTH_TOKEN`：npm 一旦发现 token 就会放弃 OIDC，退回 token 认证。
+4. 仓库 **Settings → Actions → General → Workflow permissions** 勾选 `Read and write`（创建 Release 需要 `contents: write`，workflow 内已声明 `permissions`）。
+5. workflow 里 `actions/setup-node` **不要**加 `registry-url`（它会写入 `${NODE_AUTH_TOKEN}` 的 `.npmrc`），registry 由 `package.json` 的 `publishConfig.registry` 决定。
 
 ### 发布新版本
 
+推 main 即自动发布，`release.yml` 做这些事：
+
 ```bash
-npm version patch   # 或 minor / major：改 package.json 并打 tag
-git push --follow-tags
+npm version patch     # 或 minor / major：只改 package.json 版本号
+git push origin main  # 或者 git push --follow-tags，同时推 v* tag
 ```
 
-`Release` workflow 会在 `v*` tag 上：
+1. `npm run check` 校验包结构；
+2. 查 npm 上是否已有该版本：**已有 → 跳过发布**（所以只推代码、没改版本号不会失败）；
+3. 版本是新的 → `npm publish --provenance --access public`（OIDC 换短期凭证，provenance 自动生成）；
+4. 该 tag 还没有 GitHub Release → `npm pack` 并把 `.tgz` 附到 Release，同时创建 `v<version>` tag。
 
-1. 校验 tag 与 `package.json` 版本一致；
-2. `npm run check`；
-3. `npm publish --provenance --access public`（发布到 registry.npmjs.org）；
-4. `npm pack` 并把 `.tgz` 附到 GitHub Release。
+补充：
 
-也可以在本机手动发布（注意本机 npm 默认 registry 是 npmmirror，必须显式指定官方源）：
+- 打 `v*` tag 触发时会额外校验 tag 与 `package.json` 版本一致。
+- 手动重跑：Actions → Release → **Run workflow**（`workflow_dispatch`）。
+- 运行环境需要 npm ≥ 11.5.1，workflow 里已 `npm install -g npm@latest` 并校验。
+- 也可以在本机手动发布（npm ≥ 11.5.1，注意本机 npm 默认 registry 可能是 npmmirror，必须显式指定官方源）：
 
 ```bash
 npm login --registry https://registry.npmjs.org
@@ -126,7 +129,7 @@ npm run pack:dry    # 查看 npm 包内容
 | `icon.svg` | 插件图标 |
 | `scripts/verify.mjs` | 包名 / 客户端 id / patch 行名一致性校验 |
 | `.github/workflows/ci.yml` | 推送与 PR 时校验包结构 |
-| `.github/workflows/release.yml` | tag 发布到 npm 并创建 GitHub Release |
+| `.github/workflows/release.yml` | 推 main / `v*` tag 时发布到 npm 并创建 GitHub Release |
 
 ## 本地接口
 
