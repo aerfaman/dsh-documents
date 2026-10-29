@@ -20,6 +20,9 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # 必须与 npm 侧 trusted publisher 的 "Environment" 完全一致（截图里是 release）。
+    # 不一致时 registry 的 OIDC 交换会返回 404，npm 随后静默退回传统认证并报 ENEEDAUTH。
+    environment: release
     steps:
       - uses: actions/checkout@v4
 
