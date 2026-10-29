@@ -77,6 +77,44 @@ jobs:
             echo "::notice::${{ steps.meta.outputs.name }}@${{ steps.meta.outputs.version }} is new — will publish"
           fi
 
+      # npm 在拿不到 OIDC 凭证时会静默退回传统认证，只报 "ENEEDAUTH / npm login"，
+      # 看不出到底是 OIDC 权限没给、还是 npm 侧 trusted publisher 没匹配。
+      # 这里手动走一遍同样的交换，把 registry 的真实状态码和报错打出来。
+      - name: Preflight npm trusted publishing
+        if: steps.registry.outputs.published == 'false'
+        run: |
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] || [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+            echo "::error::GitHub did not expose an OIDC endpoint to this job; the workflow needs 'permissions: id-token: write'."
+            exit 1
+          fi
+
+          id_token="$(curl -sS -H "authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=npm:registry.npmjs.org" | jq -r '.value')"
+          if [ -z "${id_token}" ] || [ "${id_token}" = "null" ]; then
+            echo "::error::could not obtain a GitHub OIDC token for audience npm:registry.npmjs.org"
+            exit 1
+          fi
+
+          status="$(curl -sS -o exchange.json -w '%{http_code}' -X POST \
+            -H "authorization: Bearer ${id_token}" \
+            "https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/${{ steps.meta.outputs.name }}")"
+          echo "token exchange HTTP ${status}"
+
+          case "${status}" in
+            2*)
+              echo "trusted publisher matched; handing off to npm publish"
+              ;;
+            *)
+              echo "--- registry response ---"
+              cat exchange.json
+              echo "-------------------------"
+              echo "::error::npm rejected the OIDC token exchange (HTTP ${status}). Fix the package's trusted publisher on npmjs.com: user/repo = ${{ github.repository }}, workflow filename = release.yml (basename only), environment = none (the workflow declares no environment)."
+              rm -f exchange.json
+              exit 1
+              ;;
+          esac
+          rm -f exchange.json
+
       - name: Publish to npm
         if: steps.registry.outputs.published == 'false'
         # trusted publishing：不传 NODE_AUTH_TOKEN / NPM_TOKEN，npm 用 id-token 换短期凭证，
