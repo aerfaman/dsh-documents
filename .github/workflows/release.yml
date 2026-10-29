@@ -126,18 +126,19 @@ jobs:
 
       - name: Verify the version is readable on npm
         if: steps.registry.outputs.published == 'false'
-        # npm can exit 0 without the version ever landing in the registry; confirm
-        # it is actually readable before announcing a release.
+        # A successful publish is not proof the version is readable: npm's read path
+        # can lag several minutes behind the write. Poll for up to five minutes and
+        # fail only when the version never becomes visible.
         run: |
-          for attempt in 1 2 3 4 5 6 7 8; do
+          for attempt in $(seq 1 30); do
             if npm view "${{ steps.meta.outputs.name }}@${{ steps.meta.outputs.version }}" version >/dev/null 2>&1; then
               echo "::notice::${{ steps.meta.outputs.name }}@${{ steps.meta.outputs.version }} is live on npm"
               exit 0
             fi
-            echo "attempt ${attempt}: not readable yet, retrying in 10s"
+            echo "attempt ${attempt}/30: not readable yet, retrying in 10s"
             sleep 10
           done
-          echo "::error::npm publish exited successfully but ${{ steps.meta.outputs.name }}@${{ steps.meta.outputs.version }} is not readable from the registry"
+          echo "::error::npm publish exited successfully but ${{ steps.meta.outputs.name }}@${{ steps.meta.outputs.version }} is still not readable after five minutes"
           exit 1
 
       - name: Check whether the GitHub Release already exists
