@@ -22,6 +22,11 @@ window.__ModuleLoader__.load({
       'workspace.all': 'All workspaces',
       'loading': 'Loading documents…',
       'loading.partial': 'Still scanning sessions… {count} shown',
+      'update.title': 'Version {version} is available',
+      'update.body': 'press Ctrl+R after upgrading',
+      'update.copy': 'Copy command',
+      'update.dismiss': 'Skip this version',
+      'update.copied': 'Command copied',
       'empty.title': 'No session documents yet',
       'empty.body': 'When a DSH session writes, edits, or presents a document in a workspace, it appears here with its originating session.',
       'empty.filtered': 'No documents match this filter.',
@@ -101,6 +106,11 @@ window.__ModuleLoader__.load({
       'workspace.all': '全部工作区',
       'loading': '正在加载文档…',
       'loading.partial': '正在继续扫描会话…已显示 {count} 个',
+      'update.title': '有新版本 {version}',
+      'update.body': '升级后按 Ctrl+R 生效',
+      'update.copy': '复制命令',
+      'update.dismiss': '跳过此版本',
+      'update.copied': '命令已复制',
       'empty.title': '还没有会话文档',
       'empty.body': 'DSH 会话在工作区写入、编辑或交付文档后，会连同来源会话一起显示在这里。',
       'empty.filtered': '没有符合当前筛选的文档。',
@@ -174,6 +184,7 @@ window.__ModuleLoader__.load({
       text: '#5b6472',
     }
     const REFRESH_MS = 60 * 1000
+    const UPDATE_DISMISS_KEY = 'dsh-documents.update.dismissed'
     // Survives a remount (switching panels and coming back): the list paints from
     // the last known state and a delta refresh runs behind it.
     const panelState = { documents: [], sessionCount: 0, revision: '' }
@@ -200,6 +211,11 @@ window.__ModuleLoader__.load({
       .dshdoc-head-actions { display: flex; align-items: center; gap: 8px; padding-bottom: 2px; }
       .dshdoc-refresh-hint { font-size: 10.5px; color: var(--dsw-alias-label-tertiary); white-space: nowrap; }
       @media (max-width: 1200px) { .dshdoc-refresh-hint { display: none; } }
+      .dshdoc-update { display: flex; align-items: center; gap: 10px; margin: 0 28px 12px; padding: 9px 12px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 26%, transparent); background: color-mix(in srgb, var(--dsw-alias-brand-primary) 8%, transparent); font-size: 12.5px; }
+      .dshdoc-update-text { flex: 1; min-width: 0; color: var(--dsw-alias-label-secondary); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .dshdoc-update-text strong { color: var(--dsw-alias-label-primary); font-weight: 600; }
+      .dshdoc-update code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; padding: 2px 6px; border-radius: 5px; background: color-mix(in srgb, var(--dsw-alias-label-primary) 8%, transparent); color: var(--dsw-alias-label-primary); white-space: nowrap; }
+      @media (max-width: 900px) { .dshdoc-update { margin: 0 16px 10px; flex-wrap: wrap; } }
       .dshdoc-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--dshdoc-border); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; transition: background 120ms ease, border-color 120ms ease, opacity 120ms ease; }
       .dshdoc-btn:hover { background: color-mix(in srgb, var(--dsw-alias-label-primary) 6%, var(--dsw-alias-bg-layer-1)); }
       .dshdoc-btn:disabled { opacity: 0.55; cursor: default; }
@@ -618,6 +634,7 @@ window.__ModuleLoader__.load({
       const [previewEpoch, setPreviewEpoch] = React.useState(0)
       const [refreshing, setRefreshing] = React.useState(false)
       const [streaming, setStreaming] = React.useState(false)
+      const [update, setUpdate] = React.useState(null)
       const [busy, setBusy] = React.useState(false)
       const [toast, setToast] = React.useState(null)
       const [dialog, setDialog] = React.useState(null)
@@ -821,6 +838,61 @@ window.__ModuleLoader__.load({
           load({ force: true, silent: true })
         }, 1800)
       }, [load])
+
+      const dismissUpdate = React.useCallback(() => {
+        setUpdate((current) => {
+          if (current !== null) {
+            try {
+              window.localStorage.setItem(UPDATE_DISMISS_KEY, current.latest)
+            } catch {
+              // Private mode or a blocked storage area: the hint simply comes back.
+            }
+          }
+          return null
+        })
+      }, [])
+
+      const copyUpgradeCommand = React.useCallback(() => {
+        const command = 'dsh plugin add dsh-documents@latest'
+        try {
+          if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            navigator.clipboard.writeText(command).then(
+              () => showToast(t('update.copied')),
+              () => showToast(command),
+            )
+            return
+          }
+        } catch {
+          // Fall through to showing the command instead of copying it.
+        }
+        showToast(command)
+      }, [showToast, t])
+
+      /**
+       * DSH never upgrades a third-party plugin by itself, so the panel asks the
+       * host whether the registry offers something newer and, if so, how to upgrade.
+       */
+      React.useEffect(() => {
+        let cancelled = false
+        requestJson('/version')
+          .then((data) => {
+            if (cancelled || data.updateAvailable !== true) return
+            let dismissed = ''
+            try {
+              dismissed = window.localStorage.getItem(UPDATE_DISMISS_KEY) || ''
+            } catch {
+              dismissed = ''
+            }
+            if (dismissed === data.latest) return
+            setUpdate({ current: String(data.current ?? ''), latest: String(data.latest ?? '') })
+          })
+          .catch(() => {
+            // Offline, or the registry is unreachable: no hint, and no error either.
+          })
+        return () => {
+          cancelled = true
+        }
+      }, [])
 
       React.useEffect(() => {
         load({ force: true })
@@ -1384,6 +1456,24 @@ window.__ModuleLoader__.load({
         ),
       )
 
+      const updateBanner = update === null ? null : h('div', { className: 'dshdoc-update', role: 'status' },
+        h('span', { className: 'dshdoc-update-text' },
+          h('strong', null, String(t('update.title') || '').replace('{version}', update.latest)),
+          h('span', null, t('update.body')),
+          h('code', null, 'dsh plugin add dsh-documents@latest'),
+        ),
+        h('button', {
+          type: 'button',
+          className: 'dshdoc-btn dshdoc-btn-brand',
+          onClick: copyUpgradeCommand,
+        }, t('update.copy')),
+        h('button', {
+          type: 'button',
+          className: 'dshdoc-btn',
+          onClick: dismissUpdate,
+        }, t('update.dismiss')),
+      )
+
       return h('div', { className: 'dshdoc-page' },
         h('style', null, CSS),
         h('header', { className: 'dshdoc-head' },
@@ -1412,6 +1502,7 @@ window.__ModuleLoader__.load({
             }, t('refresh')),
           ),
         ),
+        updateBanner,
         h('div', { className: 'dshdoc-body' },
           listOpen && h('div', { className: 'dshdoc-scrim', onClick: () => setListOpen(false) }),
           sidePanel,

@@ -23,6 +23,11 @@ const DOCS_CACHE_MS = 15000
 const SESSION_CHUNK = 4
 /** How many list revisions stay addressable, so a client can still ask for a delta. */
 const SNAPSHOT_HISTORY = 4
+/** Update self-check: registry poll interval, retry delay after a failed poll, timeout. */
+const VERSION_TTL_MS = 6 * 60 * 60 * 1000
+const VERSION_RETRY_MS = 30 * 60 * 1000
+const VERSION_TIMEOUT_MS = 2500
+const REGISTRY_CANDIDATES = ['https://registry.npmjs.org', 'https://registry.npmmirror.com']
 
 const KINDS = [
   { id: 'word', color: '#2b579a', exts: ['doc', 'docx', 'docm', 'rtf', 'odt', 'pages'] },
@@ -62,6 +67,8 @@ let renameMap = null
 const sessionCache = new Map()
 /** Recent list snapshots, keyed by revision, so a polling client can receive a delta. */
 const snapshotHistory = new Map()
+let versionCache = { at: 0, value: null }
+let ownMeta = null
 
 /**
  * Renames performed through this plugin are remembered because session events
@@ -620,6 +627,113 @@ function invalidateCache() {
   docsCache = { at: 0, key: '', value: null, snapshot: null, rev: '' }
 }
 
+async function readOwnMeta() {
+  if (ownMeta !== null) return ownMeta
+  try {
+    const raw = await fs.readFile(new URL('./package.json', import.meta.url), 'utf8')
+    const parsed = JSON.parse(raw)
+    ownMeta = { name: String(parsed?.name ?? ''), version: String(parsed?.version ?? '') }
+  } catch {
+    ownMeta = { name: '', version: '' }
+  }
+  return ownMeta
+}
+
+/**
+ * Compare two semver-ish versions (major.minor.patch plus optional prerelease).
+ * Returns -1 / 0 / 1, and 0 when either side is not a version at all.
+ */
+function compareVersions(left, right) {
+  const parse = (value) => {
+    const match = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(String(value ?? '').trim())
+    if (match === null) return null
+    return {
+      parts: [Number(match[1]), Number(match[2]), Number(match[3])],
+      pre: match[4] === undefined ? [] : match[4].split('.'),
+    }
+  }
+  const a = parse(left)
+  const b = parse(right)
+  if (a === null || b === null) return 0
+  for (let index = 0; index < 3; index += 1) {
+    if (a.parts[index] !== b.parts[index]) return a.parts[index] < b.parts[index] ? -1 : 1
+  }
+  if (a.pre.length === 0 && b.pre.length === 0) return 0
+  if (a.pre.length === 0) return 1
+  if (b.pre.length === 0) return -1
+  const length = Math.max(a.pre.length, b.pre.length)
+  for (let index = 0; index < length; index += 1) {
+    const x = a.pre[index]
+    const y = b.pre[index]
+    if (x === undefined) return -1
+    if (y === undefined) return 1
+    if (x === y) continue
+    const numeric = /^\d+$/.test(x)
+    const otherNumeric = /^\d+$/.test(y)
+    if (numeric && otherNumeric) return Number(x) < Number(y) ? -1 : 1
+    if (numeric !== otherNumeric) return numeric ? -1 : 1
+    return x < y ? -1 : 1
+  }
+  return 0
+}
+
+/** `latest` from one registry's dist-tags; null on any failure so the caller can move on. */
+async function fetchLatestVersion(registry, name) {
+  try {
+    const base = String(registry).replace(/\/+$/, '')
+    const response = await fetch(`${base}/-/package/${encodeURIComponent(name)}/dist-tags`, {
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(VERSION_TIMEOUT_MS),
+    })
+    if (!response.ok) return null
+    const data = await response.json()
+    return typeof data?.latest === 'string' && data.latest !== '' ? data.latest : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Ask the registry which version is current. DSH does not update third-party
+ * plugins on its own, so this only reports; the panel turns it into a hint.
+ *
+ * Cached for six hours (retried sooner after a failure) because it is the one
+ * thing here that leaves the machine, and `force=1` bypasses the cache.
+ */
+async function checkVersion(config, force) {
+  const now = Date.now()
+  const own = await readOwnMeta()
+  const name = own.name !== '' ? own.name : 'dsh-documents'
+  if (config?.updateCheck === false) {
+    return { name, current: own.version, latest: null, source: '', updateAvailable: false, checkedAt: now, enabled: false }
+  }
+  const cached = versionCache.value
+  const ttl = cached !== null && cached.latest === null ? VERSION_RETRY_MS : VERSION_TTL_MS
+  if (force !== true && cached !== null && now - versionCache.at < ttl) return cached
+
+  const configured = typeof config?.registry === 'string' ? config.registry.trim() : ''
+  const candidates = configured !== '' ? [configured] : REGISTRY_CANDIDATES
+  // Ask every candidate at once: on some networks the official registry stalls
+  // while the mirror answers instantly, and on others it is the other way round.
+  const answers = await Promise.all(
+    candidates.map(async (registry) => ({ registry, latest: await fetchLatestVersion(registry, name) })),
+  )
+  const usable = answers.filter((answer) => answer.latest !== null)
+  const picked = usable.find((answer) => answer.registry.includes('registry.npmjs.org')) ?? usable[0]
+  const value = {
+    name,
+    current: own.version,
+    latest: picked === undefined ? null : picked.latest,
+    source: picked === undefined ? '' : picked.registry,
+    updateAvailable: picked !== undefined
+      && own.version !== ''
+      && compareVersions(picked.latest, own.version) > 0,
+    checkedAt: now,
+  }
+  versionCache = { at: now, value }
+  return value
+}
+
 async function readPreview(target, roots) {
   const { resolved } = await resolveWithinRoots(target, roots)
   const ext = path.extname(resolved).slice(1).toLowerCase()
@@ -939,6 +1053,10 @@ function createHandler(ctx, config) {
           }
           const result = await listDocuments(ctx, config)
           sendJson(res, 200, { ok: true, rev: docsCache.rev, ...result })
+          return
+        }
+        if (route === '/version') {
+          sendJson(res, 200, { ok: true, ...(await checkVersion(config, url.searchParams.get('force') === '1')) })
           return
         }
         if (route === '/preview') {

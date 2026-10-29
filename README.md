@@ -4,7 +4,7 @@ DSH Desktop 插件：把**会话生成、编辑或交付过的文档**集中成�
 
 你不再需要回忆「刚才那个报告是哪个会话写的、写到哪一步了」——打开侧边栏的「文档」，路径、来源会话、每次修改的事件坐标都在里面。
 
-- 包名：`dsh-documents`（[npm](https://www.npmjs.com/package/dsh-documents)）· 版本 1.0.2 · MIT
+- 包名：`dsh-documents`（[npm](https://www.npmjs.com/package/dsh-documents)）· 版本 1.0.3 · MIT
 - 要求：DSH Desktop `>= 0.2.1-rc.3`，Node.js `>= 22.19.0`
 
 ---
@@ -18,6 +18,7 @@ DSH Desktop 插件：把**会话生成、编辑或交付过的文档**集中成�
 - **筛选与搜索**：按类型、工作区筛选，按文件名 / 文件夹 / 会话标题搜索，按最近活动、名称、大小排序。
 - **文件操作**：用桌面应用打开、在文件夹中显示、复制路径、重命名、移入回收站。
 - **快**：分块流式加载，先扫完的先显示；每 60 秒增量刷新，没有变化时完全不重绘。
+- **版本自检**：npm 上有新版本时，面板顶部给出一条升级提示和可复制的升级命令（只提示，不自动安装）。
 
 ---
 
@@ -68,11 +69,19 @@ dsh plugin add github:aerfaman/dsh-documents
 
 ### 升级
 
+DSH **不会自动更新第三方插件**：插件页那个「可更新 / 更新」按钮只对官方按需目录里的包生效，普通 npm 包不会出现。所以升级需要手动触发一次：
+
 ```bash
-dsh plugin add dsh-documents@latest
+dsh plugin add dsh-documents@latest     # 或 dsh plugin update dsh-documents
 ```
 
-或在插件页把版本改成新的再装一次。装完同样按 Ctrl+R。
+也可以在插件页「安装」里再输入一次 `dsh-documents`。装完按 **Ctrl+R**。
+
+**半自动提示**：打开文档库时，插件会向 npm registry 查一次当前版本（最多 6 小时一次，只取版本号、不上传任何内容）。有新版本就在顶部显示：
+
+> 有新版本 1.0.3 · 升级后按 Ctrl+R 生效 `dsh plugin add dsh-documents@latest` [复制命令] [跳过此版本]
+
+点「跳过此版本」后，同一个版本不再提示；出现更新的版本会重新提示。离线或 registry 不可达时静默跳过，不影响使用。
 
 ### 卸载
 
@@ -183,9 +192,15 @@ dsh plugin remove dsh-documents
   config:
     extraRoots:
       - "D:/Documents/Reports"
+    # 可选：自定义版本自检使用的 registry（默认同时问 npmjs 与 npmmirror）
+    registry: "https://registry.npmjs.org"
+    # 可选：关掉版本自检，完全不联网
+    updateCheck: false
 ```
 
 - `extraRoots`：在工作区之外额外纳入的目录。文件操作仍限制在这些根目录内（realpath 校验，不允许越界）。
+- `registry`：版本自检查询的 registry。不填时同时请求 `registry.npmjs.org` 与 `registry.npmmirror.com`，取先返回的可用结果（优先官方源）。
+- `updateCheck`：设为 `false` 时完全不查 npm，面板不显示新版本提示。
 
 ---
 
@@ -265,6 +280,7 @@ git push origin main
 - `GET /dsh-documents/api/list` — `{ documents, sessionCount, truncated, rev }`
 - `GET /dsh-documents/api/list?stream=1` — NDJSON：每扫完一块会话输出一行 `{ t: "docs", documents, scanned, sessions, sessionCount }`，结束为 `{ t: "done", rev, total, limit, truncated }`
 - `GET /dsh-documents/api/list?since=<rev>` — 增量：`{ rev, added, updated, removed }`；无变化 `{ unchanged: true }`；`rev` 已过期（宿主重启或落后太多）`{ full: true, documents }`
+- `GET /dsh-documents/api/version` — `{ current, latest, source, updateAvailable, checkedAt }`；`?force=1` 绕过 6 小时缓存；`latest` 为 `null` 表示查不到（离线 / registry 不可达）
 - `GET /dsh-documents/api/preview?path=...` — 文本预览
 - `GET /dsh-documents/api/raw?path=...` — 图片 / PDF 内嵌流（支持 Range）
 - `POST /dsh-documents/api/action` — `{ action: "open" | "reveal" | "rename" | "trash", path, name? }`
