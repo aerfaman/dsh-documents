@@ -111,7 +111,7 @@ jobs:
               echo "--- registry response ---"
               cat exchange.json
               echo "-------------------------"
-              echo "::error::npm rejected the OIDC token exchange (HTTP ${status}). Fix the package's trusted publisher on npmjs.com: user/repo = ${{ github.repository }}, workflow filename = release.yml (basename only), environment = none (the workflow declares no environment)."
+              echo "::error::npm rejected the OIDC token exchange (HTTP ${status}). Fix the package's trusted publisher on npmjs.com: user/repo = ${{ github.repository }}, workflow filename = release.yml (basename only), environment = release (must match the 'environment: release' this workflow declares)."
               rm -f exchange.json
               exit 1
               ;;

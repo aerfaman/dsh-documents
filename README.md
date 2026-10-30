@@ -33,7 +33,7 @@ DSH Desktop → **设置 → 插件 → 安装**，输入：
 dsh-documents
 ```
 
-需要固定版本时写 `dsh-documents@1.0.2`。
+需要固定版本时写 `dsh-documents@1.1.0`。
 
 > 「插件」页有两个容易混淆的入口：**安装**是输入包名安装；**发现**是搜索第三方插件市场索引，不会列出 npm 上的包。
 
@@ -87,7 +87,7 @@ dsh plugin add github:aerfaman/dsh-documents --profile web
 
 **半自动提示**：打开文档库时，插件会向 npm registry 查一次当前版本（最多 6 小时一次，只取版本号、不上传任何内容）。有新版本就在顶部显示：
 
-> 有新版本 1.0.3 · 升级后按 Ctrl+R 生效 `dsh plugin add dsh-documents@latest` [复制命令] [跳过此版本]
+> 有新版本 1.1.0 · 升级后按 Ctrl+R 生效 `dsh plugin add dsh-documents@latest` [复制命令] [跳过此版本]
 
 桌面版这条命令会被 CLI 拒绝，按上面「设置 → 插件 → 安装」那条走即可。点「跳过此版本」后，同一个版本不再提示；出现更新的版本会重新提示。离线或 registry 不可达时静默跳过，不影响使用。
 
@@ -252,7 +252,7 @@ Get-ChildItem $nm -Filter 'dsh-documents_tmp_*' | Remove-Item -Recurse -Force
 pnpm 11 默认带供应链策略：发布不足 24 小时的版本不参与解析。于是 `dsh plugin add dsh-documents@latest` 会解析回 lockfile 里的旧版本，看起来像「有新版本但升级无效」。三种绕法：
 
 1. **本地 tarball**（推荐自测）：`npm run install:local`，走 `file:` 依赖，不查发布时间。
-2. **把该版本加进豁免**：在 `~/.dsh/profiles/<profile>/pnpm-workspace.yaml` 的 `minimumReleaseAgeExclude` 列表里加一行 `dsh-documents@1.0.3`，再装一次。
+2. **把该版本加进豁免**：在 `~/.dsh/profiles/<profile>/pnpm-workspace.yaml` 的 `minimumReleaseAgeExclude` 列表里加一行 `dsh-documents@<要装的版本>`（例如 `dsh-documents@1.1.0`），再装一次。
 3. **等冷却期**：发布满 24 小时后 `dsh plugin add dsh-documents@latest` 自然可装。
 
 **点「打开」没反应 / 提示无法打开**
