@@ -45,6 +45,9 @@ window.__ModuleLoader__.load({
       'viewer.detail': 'Details',
       'viewer.source': 'Source',
       'viewer.reading': 'Reading',
+      'outline.title': 'Contents',
+      'code.copy': 'Copy',
+      'code.copied': 'Copied',
       'viewer.unsupported': 'This format cannot be previewed here. Open it in its desktop application.',
       'viewer.truncated': 'Preview truncated for large files.',
       'viewer.missing': 'This file no longer exists on disk.',
@@ -135,6 +138,9 @@ window.__ModuleLoader__.load({
       'viewer.detail': '详情',
       'viewer.source': '源码',
       'viewer.reading': '阅读',
+      'outline.title': '本页目录',
+      'code.copy': '复制',
+      'code.copied': '已复制',
       'viewer.unsupported': '该格式暂不支持在应用内预览，请用桌面应用打开。',
       'viewer.truncated': '文件较大，预览已截断。',
       'viewer.missing': '文件已不在磁盘上。',
@@ -314,7 +320,8 @@ window.__ModuleLoader__.load({
       .dshdoc-view-spacer { flex: 1 1 auto; min-width: 8px; }
       .dshdoc-view-titlebox { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; }
       .dshdoc-view-name { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .dshdoc-view-sub { font-size: 11.5px; color: var(--dsw-alias-label-secondary); margin-top: 2px; }
+      .dshdoc-view-sub { font-size: 11.5px; color: var(--dsw-alias-label-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .dshdoc-ws-dot { display: inline-block; width: 7px; height: 7px; border-radius: 3px; margin-right: 7px; vertical-align: 1px; }
       .dshdoc-zoom { display: flex; align-items: center; gap: 2px; border: 1px solid var(--dshdoc-border); border-radius: 9px; background: var(--dsw-alias-bg-base); padding: 2px; }
       .dshdoc-zoom-value { min-width: 44px; text-align: center; font-size: 11.5px; color: var(--dsw-alias-label-secondary); }
       .dshdoc-body { flex: 1; min-height: 0; display: flex; position: relative; border-top: 1px solid var(--dshdoc-border); }
@@ -330,21 +337,25 @@ window.__ModuleLoader__.load({
       .dshdoc-side .dshdoc-row { padding: 8px 9px; gap: 10px; }
       .dshdoc-side .dshdoc-tile { width: 34px; height: 38px; font-size: 8.5px; }
       .dshdoc-tree { display: flex; flex-direction: column; gap: 3px; }
-      .dshdoc-group { min-width: 0; }
-      .dshdoc-group-head { display: flex; align-items: center; gap: 6px; width: 100%; padding: 6px 8px; border: 1px solid transparent; border-radius: 9px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; outline: none; }
+      .dshdoc-group { --ws-h: 248; min-width: 0; }
+      .dshdoc-group-head { display: flex; align-items: center; gap: 6px; width: 100%; padding: 6px 8px; border: 1px solid transparent; border-radius: 9px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; outline: none; transition: background 0.16s ease, border-color 0.16s ease; }
       .dshdoc-group-head:hover { background: color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent); }
       .dshdoc-group-head:focus-visible { border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 55%, transparent); }
-      .dshdoc-group[data-level="session"] > .dshdoc-group-head { padding-left: 18px; }
+      .dshdoc-group[data-level="session"] > .dshdoc-group-head { padding-left: 12px; }
       .dshdoc-group-title { flex: 1; min-width: 0; font-size: 12.5px; line-height: 1.45; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .dshdoc-group[data-level="workspace"] > .dshdoc-group-head .dshdoc-group-title { font-weight: 600; }
+      .dshdoc-group[data-level="workspace"] > .dshdoc-group-head .dshdoc-group-title { font-weight: 600; color: color-mix(in oklab, hsl(var(--ws-h) 58% 40%) 72%, var(--dsw-alias-label-primary)); }
       .dshdoc-group[data-level="session"] > .dshdoc-group-head .dshdoc-group-title { color: var(--dsw-alias-label-secondary); }
-      .dshdoc-group-count { flex: none; font-size: 10.5px; padding-left: 4px; color: var(--dsw-alias-label-tertiary); }
+      .dshdoc-group[data-level="session"] > .dshdoc-group-head:hover .dshdoc-group-title { color: color-mix(in oklab, hsl(var(--ws-h) 55% 44%) 62%, var(--dsw-alias-label-primary)); }
+      .dshdoc-group-count { flex: none; font-size: 10.5px; padding-left: 4px; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }
+      .dshdoc-group[data-level="workspace"] > .dshdoc-group-head .dshdoc-group-count { color: color-mix(in oklab, hsl(var(--ws-h) 45% 52%) 55%, var(--dsw-alias-label-tertiary)); }
       .dshdoc-caret { flex: none; display: inline-flex; color: var(--dsw-alias-label-tertiary); transition: transform 0.12s ease; }
       .dshdoc-caret[data-open="true"] { transform: rotate(90deg); }
       .dshdoc-folder { flex: none; display: inline-flex; color: var(--dsw-alias-label-secondary); }
-      .dshdoc-group[data-level="workspace"] > .dshdoc-group-head .dshdoc-folder { color: var(--dsw-alias-brand-primary); }
+      .dshdoc-group[data-level="workspace"] > .dshdoc-group-head .dshdoc-folder { color: color-mix(in oklab, hsl(var(--ws-h) 62% 46%) 88%, var(--dsw-alias-label-primary)); }
+      .dshdoc-group[data-level="session"] > .dshdoc-group-head .dshdoc-folder { color: color-mix(in oklab, hsl(var(--ws-h) 48% 52%) 62%, var(--dsw-alias-label-tertiary)); }
+      .dshdoc-group[data-level="workspace"] > .dshdoc-group-body { margin-left: 11px; padding-left: 3px; border-left: 1px solid color-mix(in oklab, hsl(var(--ws-h) 55% 50%) 24%, transparent); }
       .dshdoc-group-body { display: flex; flex-direction: column; }
-      .dshdoc-side .dshdoc-row[data-grouped="true"] { padding-left: 26px; }
+      .dshdoc-side .dshdoc-row[data-grouped="true"] { padding-left: 22px; }
       .dshdoc-tree-tools { display: flex; align-items: center; gap: 4px; }
       .dshdoc-mini { height: 24px; padding: 0 8px; border-radius: 7px; border: 1px solid var(--dshdoc-border); background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; cursor: pointer; white-space: nowrap; }
       .dshdoc-mini:hover { color: var(--dsw-alias-label-primary); }
@@ -355,27 +366,86 @@ window.__ModuleLoader__.load({
       .dshdoc-detail-head { display: flex; align-items: center; gap: 8px; }
       .dshdoc-detail-head .dshdoc-section-title { flex: 1; }
       .dshdoc-view-body { flex: 1; min-height: 0; display: flex; position: relative; overflow: hidden; }
-      .dshdoc-view-main { flex: 1; min-width: 0; overflow: auto; padding: 28px 32px 80px; }
-      .dshdoc-doc { max-width: 860px; margin: 0 auto; }
-      .dshdoc-doc-pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height: 1.65; }
-      .dshdoc-md { line-height: 1.75; word-break: break-word; }
-      .dshdoc-md h1 { font-size: 1.7em; margin: 0.9em 0 0.5em; line-height: 1.35; }
-      .dshdoc-md h2 { font-size: 1.4em; margin: 1.2em 0 0.45em; line-height: 1.4; }
-      .dshdoc-md h3 { font-size: 1.18em; margin: 1.1em 0 0.4em; }
-      .dshdoc-md h4, .dshdoc-md h5, .dshdoc-md h6 { font-size: 1em; margin: 1em 0 0.35em; }
-      .dshdoc-md p { margin: 0.55em 0; }
-      .dshdoc-md ul, .dshdoc-md ol { margin: 0.5em 0; padding-left: 1.5em; }
-      .dshdoc-md li { margin: 0.2em 0; }
-      .dshdoc-md code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; background: color-mix(in srgb, var(--dsw-alias-label-primary) 7%, transparent); padding: 0.12em 0.35em; border-radius: 5px; }
-      .dshdoc-md pre.dshdoc-md-code { margin: 0.8em 0; padding: 12px 14px; overflow: auto; border-radius: 10px; border: 1px solid var(--dshdoc-border); background: var(--dsw-alias-bg-layer-2); }
-      .dshdoc-md pre.dshdoc-md-code code { background: transparent; padding: 0; font-size: 0.88em; }
-      .dshdoc-md blockquote { margin: 0.8em 0; padding: 2px 0 2px 14px; border-left: 3px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 45%, transparent); color: var(--dsw-alias-label-secondary); }
-      .dshdoc-md hr { margin: 1.4em 0; border: none; border-top: 1px solid var(--dshdoc-border); }
-      .dshdoc-md a { color: var(--dsw-alias-brand-primary); text-decoration: none; }
-      .dshdoc-md a:hover { text-decoration: underline; }
-      .dshdoc-md table { border-collapse: collapse; margin: 0.9em 0; font-size: 0.94em; }
-      .dshdoc-md th, .dshdoc-md td { border: 1px solid var(--dshdoc-border); padding: 6px 10px; text-align: left; }
-      .dshdoc-md th { background: color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent); }
+      .dshdoc-view-main { flex: 1; min-width: 0; overflow: auto; padding: 40px 48px 96px; scroll-behavior: smooth; }
+      .dshdoc-doc { max-width: 760px; margin: 0 auto; }
+      .dshdoc-doc-pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height: 1.7; }
+      .dshdoc-md { line-height: 1.82; word-break: break-word; text-wrap: pretty; }
+      .dshdoc-md > :first-child { margin-top: 0; }
+      .dshdoc-md h1 { font-size: 2em; font-weight: 650; letter-spacing: -0.022em; line-height: 1.22; margin: 1.7em 0 0.7em; padding-bottom: 0.38em; border-bottom: 1px solid var(--dshdoc-border); }
+      .dshdoc-md h2 { font-size: 1.45em; font-weight: 640; letter-spacing: -0.015em; line-height: 1.32; margin: 1.8em 0 0.6em; }
+      .dshdoc-md h3 { font-size: 1.16em; font-weight: 600; letter-spacing: -0.008em; margin: 1.5em 0 0.45em; }
+      .dshdoc-md h4, .dshdoc-md h5, .dshdoc-md h6 { font-size: 1em; font-weight: 600; margin: 1.35em 0 0.4em; }
+      .dshdoc-md p { margin: 0.85em 0; }
+      .dshdoc-md strong { font-weight: 650; }
+      .dshdoc-md ul, .dshdoc-md ol { margin: 0.8em 0; padding-left: 1.45em; }
+      .dshdoc-md li { margin: 0.34em 0; padding-left: 0.15em; }
+      .dshdoc-md li::marker { color: color-mix(in oklab, var(--dsw-alias-brand-primary) 62%, var(--dsw-alias-label-tertiary)); }
+      .dshdoc-md code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.87em; padding: 0.16em 0.42em; border-radius: 6px; background: color-mix(in srgb, var(--dsw-alias-label-primary) 6.5%, transparent); border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary) 7%, transparent); }
+      .dshdoc-md blockquote { margin: 1.25em 0; padding: 0.6em 1.05em; border-left: 3px solid color-mix(in oklab, var(--dsw-alias-brand-primary) 55%, transparent); border-radius: 0 10px 10px 0; background: color-mix(in srgb, var(--dsw-alias-brand-primary) 5%, transparent); color: var(--dsw-alias-label-secondary); }
+      .dshdoc-md blockquote p { margin: 0.3em 0; }
+      .dshdoc-md hr { margin: 2.4em auto; width: 38%; border: 0; border-top: 1px solid var(--dshdoc-border); }
+      .dshdoc-md a { color: var(--dsw-alias-brand-primary); text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; text-decoration-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 35%, transparent); transition: text-decoration-color 0.18s ease; }
+      .dshdoc-md a:hover { text-decoration-color: currentColor; }
+      .dshdoc-md table { width: 100%; border-collapse: separate; border-spacing: 0; margin: 1.2em 0; font-size: 0.93em; border: 1px solid var(--dshdoc-border); border-radius: 12px; overflow: hidden; font-variant-numeric: tabular-nums; }
+      .dshdoc-md th, .dshdoc-md td { padding: 9px 13px; text-align: left; border-bottom: 1px solid var(--dshdoc-border); }
+      .dshdoc-md th { font-weight: 600; background: color-mix(in srgb, var(--dsw-alias-label-primary) 4.5%, transparent); }
+      .dshdoc-md tr:last-child td { border-bottom: none; }
+      .dshdoc-md tbody tr:nth-child(even) { background: color-mix(in srgb, var(--dsw-alias-label-primary) 2.2%, transparent); }
+      .dshdoc-md img { display: block; max-width: 100%; height: auto; margin: 1.35em auto; border-radius: 12px; box-shadow: 0 14px 34px color-mix(in srgb, var(--dsw-alias-label-primary) 14%, transparent); }
+      .dshdoc-md-task { list-style: none; margin-left: -1.25em; display: flex; gap: 9px; align-items: flex-start; }
+      .dshdoc-md-check { flex: none; width: 16px; height: 16px; margin-top: 0.24em; border-radius: 5px; border: 1px solid var(--dshdoc-border); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; line-height: 1; color: #fff; }
+      .dshdoc-md-task[data-done="true"] .dshdoc-md-check { background: var(--dsw-alias-brand-primary); border-color: transparent; }
+      .dshdoc-md-task[data-done="true"] > span:last-child { color: var(--dsw-alias-label-tertiary); }
+      .dshdoc-code { margin: 1.2em 0; border: 1px solid var(--dshdoc-border); border-radius: 12px; overflow: hidden; background: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 90%, var(--dsw-alias-bg-base)); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--dsw-alias-label-primary) 4%, transparent); }
+      .dshdoc-code-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 5px 8px 5px 13px; border-bottom: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary) 7%, transparent); background: color-mix(in srgb, var(--dsw-alias-label-primary) 3.5%, transparent); }
+      .dshdoc-code-lang { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dsw-alias-label-tertiary); }
+      .dshdoc-code-copy { font: inherit; font-size: 11px; color: var(--dsw-alias-label-secondary); background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 2px 9px; cursor: pointer; transition: background 0.18s ease, color 0.18s ease; }
+      .dshdoc-code-copy:hover { background: color-mix(in srgb, var(--dsw-alias-label-primary) 7%, transparent); color: var(--dsw-alias-label-primary); }
+      .dshdoc-code-copy:active { transform: translateY(1px); }
+      .dshdoc-code-copy[data-copied="true"] { color: var(--dsw-alias-state-success-primary); }
+      .dshdoc-code-body { margin: 0; padding: 14px 16px; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.86em; line-height: 1.72; tab-size: 2; }
+      .dshdoc-code-body code { background: none; border: none; padding: 0; font-size: inherit; }
+      .dshdoc-tok-kw { color: color-mix(in oklab, #b3452a 78%, var(--dsw-alias-label-primary)); font-weight: 600; }
+      .dshdoc-tok-str { color: color-mix(in oklab, #157a5c 78%, var(--dsw-alias-label-primary)); }
+      .dshdoc-tok-num { color: color-mix(in oklab, #9a5b12 80%, var(--dsw-alias-label-primary)); }
+      .dshdoc-tok-const { color: color-mix(in oklab, #a13a6b 76%, var(--dsw-alias-label-primary)); }
+      .dshdoc-tok-fn { color: color-mix(in oklab, #2f5fb3 80%, var(--dsw-alias-label-primary)); }
+      .dshdoc-tok-type { color: color-mix(in oklab, #0e6f86 76%, var(--dsw-alias-label-primary)); }
+      .dshdoc-tok-attr { color: color-mix(in oklab, #8a5a13 78%, var(--dsw-alias-label-primary)); }
+      .dshdoc-tok-tag { color: color-mix(in oklab, #a63a4e 78%, var(--dsw-alias-label-primary)); }
+      .dshdoc-tok-var { color: color-mix(in oklab, #6b4bb0 72%, var(--dsw-alias-label-primary)); }
+      .dshdoc-tok-com { color: var(--dsw-alias-label-tertiary); font-style: italic; }
+      .dshdoc-tok-op, .dshdoc-tok-punc { color: color-mix(in oklab, var(--dsw-alias-label-secondary) 85%, var(--dsw-alias-label-primary)); }
+      .dshdoc-tok-add { color: color-mix(in oklab, #157a3c 80%, var(--dsw-alias-label-primary)); background: color-mix(in srgb, #157a3c 9%, transparent); }
+      .dshdoc-tok-del { color: color-mix(in oklab, #b42318 78%, var(--dsw-alias-label-primary)); background: color-mix(in srgb, #b42318 9%, transparent); }
+      .dshdoc-tok-meta { color: var(--dsw-alias-label-tertiary); }
+      .dshdoc-md-heading { scroll-margin-top: 96px; }
+      .dshdoc-outline { position: absolute; top: 0; bottom: 0; left: 0; z-index: 12; width: 340px; display: flex; align-items: center; padding: 18px 0 26px 8px; pointer-events: none; }
+      .dshdoc-outline[data-mode="hidden"] { display: none; }
+      .dshdoc-outline[data-mode="full"] { padding-left: 12px; }
+      .dshdoc-outline-panel { --rail-w: 150px; position: relative; display: flex; flex-direction: column; width: var(--rail-w); max-height: min(66vh, 620px); box-sizing: border-box; padding: 5px 4px; pointer-events: auto; background: transparent; border: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+      .dshdoc-outline-list { position: relative; display: flex; flex-direction: column; gap: 1px; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; padding: 2px 0; }
+      .dshdoc-outline-list[data-overflow="true"] { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%); }
+      .dshdoc-outline-list::-webkit-scrollbar { display: none; }
+      .dshdoc-outline-item { --size: 12px; --blur: 0px; --alpha: 1; display: flex; align-items: center; gap: 8px; width: 100%; height: 24px; box-sizing: border-box; margin: 0; padding: 0 9px 0 7px; border: none; border-radius: 8px; background: transparent; color: color-mix(in srgb, var(--dsw-alias-label-primary) 78%, transparent); font: inherit; font-size: var(--size); line-height: 1.35; text-align: left; cursor: pointer; outline: none; opacity: var(--alpha); filter: blur(var(--blur)); transition: font-size 0.36s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.36s ease, filter 0.36s ease, color 0.2s ease, transform 0.28s cubic-bezier(0.22, 1, 0.36, 1); }
+      .dshdoc-outline-item[data-level="1"] { padding-left: 7px; }
+      .dshdoc-outline-item[data-level="2"] { padding-left: 19px; }
+      .dshdoc-outline-item[data-active="true"] { color: var(--dsw-alias-brand-primary); font-weight: 600; }
+      .dshdoc-outline-item:hover, .dshdoc-outline-item:focus-visible { opacity: 1; filter: none; color: var(--dsw-alias-label-primary); font-size: calc(var(--size) + 1.4px); transform: translateX(2px); transition-duration: 0.18s; }
+      .dshdoc-outline-item[data-active="true"]:hover, .dshdoc-outline-item[data-active="true"]:focus-visible { color: var(--dsw-alias-brand-primary); }
+      .dshdoc-outline-item:focus-visible { box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-brand-primary) 38%, transparent); }
+      .dshdoc-outline-tick { flex: none; width: 11px; height: 1.5px; border-radius: 2px; background: currentColor; opacity: 0.5; transition: width 0.34s cubic-bezier(0.22, 1, 0.36, 1), height 0.34s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease, box-shadow 0.3s ease; }
+      .dshdoc-outline-item[data-level="2"] .dshdoc-outline-tick { width: 7px; }
+      .dshdoc-outline-item[data-active="true"] .dshdoc-outline-tick { width: 18px; height: 2px; opacity: 1; box-shadow: 0 0 10px color-mix(in srgb, var(--dsw-alias-brand-primary) 62%, transparent); }
+      .dshdoc-outline-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: opacity 0.26s ease, transform 0.36s cubic-bezier(0.22, 1, 0.36, 1); }
+      .dshdoc-outline[data-mode="compact"] .dshdoc-outline-label { opacity: 0; transform: translateX(-6px); }
+      .dshdoc-outline[data-mode="compact"] .dshdoc-outline-item { gap: 0; }
+      .dshdoc-outline[data-mode="compact"] .dshdoc-outline-item[data-level="2"] { padding-left: 12px; }
+      .dshdoc-outline[data-mode="compact"] .dshdoc-outline-item[data-active="true"] .dshdoc-outline-tick { width: 14px; }
+      @media (prefers-reduced-motion: reduce) {
+        .dshdoc-outline-item, .dshdoc-outline-tick, .dshdoc-outline-label { transition-duration: 0.01ms !important; }
+        .dshdoc-view-main { scroll-behavior: auto; }
+      }
       .dshdoc-media { display: block; max-width: 100%; margin: 0 auto; border-radius: 8px; }
       .dshdoc-pdf { width: 100%; height: 100%; border: none; background: #fff; }
       .dshdoc-unsupported { max-width: 520px; margin: 60px auto; padding: 28px; border: 1px dashed var(--dshdoc-border); border-radius: 14px; text-align: center; color: var(--dsw-alias-label-secondary); font-size: 13px; line-height: 1.7; }
@@ -579,11 +649,434 @@ window.__ModuleLoader__.load({
       return line.replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim())
     }
 
-    function renderMarkdown(text) {
+    // ---------------------------------------------------------------- syntax colouring
+    // Self-contained tokenizer: the plugin ships as two plain files with no
+    // dependencies, so pulling in Prism or highlight.js (100 KB+) is not an option.
+
+    const JS_KEYWORDS = 'await async break case catch class const continue debugger default delete do else export extends finally for from function get if import in instanceof let new of return set static super switch this throw try typeof var void while yield'
+    const JS_TYPES = 'Array Boolean Date Error JSON Map Math Number Object Promise Proxy Reflect RegExp Set String Symbol WeakMap WeakSet Intl BigInt'
+    const JS_CONSTANTS = 'true false null undefined NaN Infinity'
+
+    const CODE_LANGS = {
+      javascript: { line: '//', block: ['/*', '*/'], quotes: ['"', "'", '`'], keywords: JS_KEYWORDS, types: JS_TYPES, constants: JS_CONSTANTS },
+      typescript: {
+        line: '//', block: ['/*', '*/'], quotes: ['"', "'", '`'],
+        keywords: `${JS_KEYWORDS} interface type enum implements namespace declare readonly abstract as satisfies keyof infer is asserts override public private protected`,
+        types: `${JS_TYPES} Record Partial Readonly Pick Omit Exclude Extract NonNullable ReturnType Awaited`,
+        constants: JS_CONSTANTS,
+      },
+      json: { line: null, block: null, quotes: ['"'], keywords: '', types: '', constants: 'true false null' },
+      python: {
+        line: '#', block: null, quotes: ['"', "'"], triple: true,
+        keywords: 'and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield match case',
+        types: 'int float str bool list dict set tuple bytes object Exception ValueError TypeError RuntimeError',
+        constants: 'True False None self cls',
+      },
+      bash: {
+        line: '#', block: null, quotes: ['"', "'"],
+        keywords: 'if then else elif fi for while do done case esac function return local export readonly declare in select until time',
+        types: '', constants: 'true false', variables: true,
+      },
+      powershell: {
+        line: '#', block: ['<#', '#>'], quotes: ['"', "'"],
+        keywords: 'if else elseif switch foreach for while do function param return try catch finally throw begin process end filter class enum using',
+        types: '', constants: '$true $false $null', variables: true,
+      },
+      css: { line: null, block: ['/*', '*/'], quotes: ['"', "'"], keywords: 'important media supports keyframes import charset layer container font-face', types: '', constants: '', css: true },
+      html: { html: true },
+      sql: {
+        line: '--', block: ['/*', '*/'], quotes: ["'", '"'],
+        keywords: 'select from where join left right inner outer full on group by order having limit offset insert into values update set delete create table alter drop index view as and or not null is in like between distinct union all case when then else end primary key foreign references default',
+        types: 'int integer varchar text date timestamp boolean decimal numeric',
+        constants: 'null true false', caseInsensitive: true,
+      },
+      yaml: { yaml: true },
+      go: {
+        line: '//', block: ['/*', '*/'], quotes: ['"', '`'],
+        keywords: 'break case chan const continue default defer else fallthrough for func go goto if import interface map package range return select struct switch type var',
+        types: 'bool byte complex64 complex128 error float32 float64 int int8 int16 int32 int64 rune string uint uint8 uint16 uint32 uint64 uintptr',
+        constants: 'true false nil iota',
+      },
+      rust: {
+        line: '//', block: ['/*', '*/'], quotes: ['"'],
+        keywords: 'as async await break const continue crate dyn else enum extern fn for if impl in let loop match mod move mut pub ref return self static struct super trait type unsafe use where while',
+        types: 'bool char f32 f64 i8 i16 i32 i64 i128 isize str u8 u16 u32 u64 u128 usize String Vec Option Result Box',
+        constants: 'true false None Some Ok Err',
+      },
+      java: {
+        line: '//', block: ['/*', '*/'], quotes: ['"', "'"],
+        keywords: 'abstract assert break case catch class const continue default do else enum extends final finally for goto if implements import instanceof interface native new package private protected public return static strictfp super switch synchronized this throw throws transient try volatile while var record sealed permits',
+        types: 'boolean byte char double float int long short void String Object Integer Long Double List Map Set Optional',
+        constants: 'true false null',
+      },
+      c: {
+        line: '//', block: ['/*', '*/'], quotes: ['"', "'"],
+        keywords: 'auto break case const continue default do else enum extern for goto if inline register restrict return sizeof static struct switch typedef union volatile while',
+        types: 'char double float int long short signed unsigned void size_t int8_t int16_t int32_t int64_t uint8_t uint16_t uint32_t uint64_t FILE',
+        constants: 'NULL true false',
+      },
+      diff: { diff: true },
+    }
+
+    CODE_LANGS.cpp = {
+      ...CODE_LANGS.c,
+      keywords: `${CODE_LANGS.c.keywords} class namespace template typename public private protected virtual override new delete nullptr using operator friend explicit`,
+      constants: 'NULL true false nullptr',
+    }
+
+    const CODE_ALIASES = {
+      js: 'javascript', mjs: 'javascript', cjs: 'javascript', jsx: 'javascript',
+      ts: 'typescript', tsx: 'typescript', mts: 'typescript',
+      py: 'python', python3: 'python',
+      sh: 'bash', shell: 'bash', zsh: 'bash', console: 'bash', dockerfile: 'bash',
+      ps1: 'powershell', pwsh: 'powershell', ps: 'powershell',
+      scss: 'css', less: 'css', sass: 'css',
+      htm: 'html', xhtml: 'html', xml: 'html', svg: 'html', vue: 'html',
+      yml: 'yaml', toml: 'yaml', ini: 'yaml', conf: 'yaml', env: 'yaml',
+      golang: 'go', rs: 'rust',
+      cxx: 'cpp', 'c++': 'cpp', hpp: 'cpp', cc: 'cpp', h: 'c',
+      patch: 'diff',
+    }
+
+    /** Map a fence info string ("```js title=x") to a known language id, or ''. */
+    function canonicalLanguage(raw) {
+      const key = String(raw || '').trim().toLowerCase().split(/[\s{:(]/)[0]
+      if (key === '') return ''
+      if (CODE_LANGS[key] !== undefined) return key
+      return CODE_ALIASES[key] || ''
+    }
+
+    function wordSet(value) {
+      return new Set(String(value || '').split(/\s+/).filter((entry) => entry !== ''))
+    }
+
+    /** Turn a language spec into the sets the scanner needs (cached on the spec). */
+    function langSpec(lang) {
+      const spec = CODE_LANGS[lang]
+      if (spec.__cache === undefined) {
+        spec.__cache = {
+          keywords: wordSet(spec.keywords),
+          types: wordSet(spec.types),
+          constants: wordSet(spec.constants),
+        }
+      }
+      return spec
+    }
+
+    function lineChunks(source) {
+      return String(source).split('\n')
+    }
+
+    function yamlSpans(source) {
+      const spans = []
+      const lines = lineChunks(source)
+      lines.forEach((line, lineIndex) => {
+        if (lineIndex > 0) spans.push({ c: '', v: '\n' })
+        const comment = /(^|\s)#(.*)$/.exec(line)
+        const body = comment === null ? line : line.slice(0, comment.index)
+        const tail = comment === null ? '' : line.slice(comment.index)
+        const key = /^(\s*)(- )?([\w."'$/-][^:]*?)(:)(\s|$)/.exec(body)
+        if (key === null) {
+          spans.push({ c: '', v: body })
+        } else {
+          spans.push({ c: '', v: key[1] })
+          if (key[2]) spans.push({ c: 'punc', v: key[2] })
+          spans.push({ c: 'attr', v: key[3] })
+          spans.push({ c: 'op', v: key[4] })
+          spans.push({ c: '', v: key[5] })
+          const value = body.slice(key[0].length)
+          const quoted = /^(".*"|'.*')/.exec(value)
+          if (quoted !== null) {
+            spans.push({ c: 'str', v: quoted[0] })
+            spans.push({ c: '', v: value.slice(quoted[0].length) })
+          } else if (/^(true|false|null|~)$/i.test(value.trim())) {
+            spans.push({ c: 'const', v: value })
+          } else if (/^[+-]?\d/.test(value.trim())) {
+            spans.push({ c: 'num', v: value })
+          } else {
+            spans.push({ c: '', v: value })
+          }
+        }
+        if (tail !== '') spans.push({ c: 'com', v: tail })
+      })
+      return spans
+    }
+
+    function diffSpans(source) {
+      const spans = []
+      lineChunks(source).forEach((line, lineIndex) => {
+        if (lineIndex > 0) spans.push({ c: '', v: '\n' })
+        if (/^\+/.test(line)) spans.push({ c: 'add', v: line })
+        else if (/^-/.test(line)) spans.push({ c: 'del', v: line })
+        else if (/^@@/.test(line)) spans.push({ c: 'meta', v: line })
+        else spans.push({ c: '', v: line })
+      })
+      return spans
+    }
+
+    function htmlSpans(source) {
+      const spans = []
+      const text = String(source)
+      let index = 0
+      let plain = ''
+      const flush = () => {
+        if (plain !== '') {
+          spans.push({ c: '', v: plain })
+          plain = ''
+        }
+      }
+      while (index < text.length) {
+        if (text.startsWith('<!--', index)) {
+          const end = text.indexOf('-->', index + 4)
+          const stop = end === -1 ? text.length : end + 3
+          flush()
+          spans.push({ c: 'com', v: text.slice(index, stop) })
+          index = stop
+          continue
+        }
+        if (text[index] === '<') {
+          flush()
+          const tag = /^<\/?([A-Za-z][\w:-]*)/.exec(text.slice(index))
+          if (tag !== null) {
+            spans.push({ c: 'punc', v: tag[0].slice(0, tag[0].length - tag[1].length) })
+            spans.push({ c: 'tag', v: tag[1] })
+            index += tag[0].length
+          } else {
+            spans.push({ c: 'punc', v: '<' })
+            index += 1
+          }
+          // attributes until the closing angle bracket
+          while (index < text.length && text[index] !== '>') {
+            const rest = text.slice(index)
+            const attr = /^\s+/.exec(rest) || /^[/=]/.exec(rest) || /^[A-Za-z_:@][\w:.-]*/.exec(rest) || /^"[^"]*"|^'[^']*'/.exec(rest)
+            if (attr !== null) {
+              const value = attr[0]
+              let cls = ''
+              if (/^\s+$/.test(value)) cls = ''
+              else if (value === '=' || value === '/') cls = 'op'
+              else if (/^["']/.test(value)) cls = 'str'
+              else cls = 'attr'
+              spans.push({ c: cls, v: value })
+              index += value.length
+            } else {
+              spans.push({ c: 'punc', v: text[index] })
+              index += 1
+            }
+          }
+          if (index < text.length) {
+            spans.push({ c: 'punc', v: '>' })
+            index += 1
+          }
+          continue
+        }
+        plain += text[index]
+        index += 1
+      }
+      flush()
+      return spans
+    }
+
+    function genericSpans(source, lang) {
+      const spec = langSpec(lang)
+      const { keywords, types, constants } = spec.__cache
+      const text = String(source)
+      const spans = []
+      let index = 0
+      let plain = ''
+      const flush = () => {
+        if (plain !== '') {
+          spans.push({ c: '', v: plain })
+          plain = ''
+        }
+      }
+      const push = (cls, value) => {
+        flush()
+        spans.push({ c: cls, v: value })
+      }
+      const normalise = (word) => (spec.caseInsensitive ? word.toLowerCase() : word)
+
+      while (index < text.length) {
+        const rest = text.slice(index)
+
+        if (spec.block !== null && spec.block !== undefined && rest.startsWith(spec.block[0])) {
+          const end = text.indexOf(spec.block[1], index + spec.block[0].length)
+          const stop = end === -1 ? text.length : end + spec.block[1].length
+          push('com', text.slice(index, stop))
+          index = stop
+          continue
+        }
+
+        if (spec.line !== null && rest.startsWith(spec.line)) {
+          let end = text.indexOf('\n', index)
+          if (end === -1) end = text.length
+          push('com', text.slice(index, end))
+          index = end
+          continue
+        }
+
+        const quote = text[index]
+        if (spec.quotes.includes(quote)) {
+          const triple = spec.triple === true && rest.startsWith(quote.repeat(3))
+          const fence = triple ? quote.repeat(3) : quote
+          let cursor = index + fence.length
+          while (cursor < text.length) {
+            if (text[cursor] === '\\') {
+              cursor += 2
+              continue
+            }
+            if (text.startsWith(fence, cursor)) {
+              cursor += fence.length
+              break
+            }
+            if (!triple && text[cursor] === '\n') break
+            cursor += 1
+          }
+          push('str', text.slice(index, Math.min(cursor, text.length)))
+          index = Math.min(cursor, text.length)
+          continue
+        }
+
+        if (spec.variables === true && (quote === '$' || quote === '@')) {
+          const variable = /^[$@]{1,2}\{?[A-Za-z_][\w:.-]*\}?/.exec(rest)
+          if (variable !== null) {
+            push('var', variable[0])
+            index += variable[0].length
+            continue
+          }
+        }
+
+        if (/[0-9]/.test(quote) && !/[\w$]/.test(text[index - 1] || '')) {
+          const number = /^(0[xX][0-9a-fA-F]+|0[bB][01]+|[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)?)([a-zA-Z%]+)?/.exec(rest)
+          if (number !== null) {
+            push('num', number[0])
+            index += number[0].length
+            continue
+          }
+        }
+
+        if (/[A-Za-z_$]/.test(quote)) {
+          const word = /^[A-Za-z_$][\w$]*/.exec(rest)[0]
+          const key = normalise(word)
+          const after = text.slice(index + word.length)
+          let cls = ''
+          if (spec.variables === true && (word.startsWith('$') || word.startsWith('@'))) cls = 'var'
+          else if (constants.has(key)) cls = 'const'
+          else if (keywords.has(key)) cls = 'kw'
+          else if (types.has(key)) cls = 'type'
+          else if (/^\s*\(/.test(after)) cls = 'fn'
+          else if (spec.css === true && /^\s*:/.test(after)) cls = 'attr'
+          if (cls === '') plain += word
+          else push(cls, word)
+          index += word.length
+          continue
+        }
+
+        if (/\s/.test(quote)) {
+          const space = /^\s+/.exec(rest)[0]
+          plain += space
+          index += space.length
+          continue
+        }
+
+        push('op', quote)
+        index += 1
+      }
+      flush()
+      return spans
+    }
+
+    function highlightSpans(source, lang) {
+      const spec = CODE_LANGS[lang]
+      if (spec === undefined) return [{ c: '', v: String(source) }]
+      if (spec.html === true) return htmlSpans(source)
+      if (spec.diff === true) return diffSpans(source)
+      if (spec.yaml === true) return yamlSpans(source)
+      return genericSpans(source, lang)
+    }
+
+    function highlightNodes(source, lang, prefix) {
+      return highlightSpans(source, lang).map((span, spanIndex) => (
+        span.c === ''
+          ? span.v
+          : h('span', { key: `${prefix}-${spanIndex}`, className: `dshdoc-tok-${span.c}` }, span.v)
+      ))
+    }
+
+    function CodeBlock({ code, lang, t }) {
+      // Falling back to the English dictionary keeps raw keys out of the UI when
+      // the host locale is unavailable.
+      const translate = typeof t === 'function' ? t : translateWith(EN)
+      const canonical = canonicalLanguage(lang)
+      const [copied, setCopied] = React.useState(false)
+      const timer = React.useRef(null)
+
+      React.useEffect(() => () => {
+        if (timer.current !== null) window.clearTimeout(timer.current)
+      }, [])
+
+      const copy = React.useCallback(() => {
+        try {
+          const clipboard = navigator.clipboard
+          if (clipboard && typeof clipboard.writeText === 'function') {
+            clipboard.writeText(code).then(() => {
+              setCopied(true)
+              if (timer.current !== null) window.clearTimeout(timer.current)
+              timer.current = window.setTimeout(() => setCopied(false), 1600)
+            }).catch(() => {})
+          }
+        } catch {
+          // Clipboard unavailable: the block stays plain text, nothing breaks.
+        }
+      }, [code])
+
+      return h('div', { className: 'dshdoc-code' },
+        h('div', { className: 'dshdoc-code-head' },
+          h('span', { className: 'dshdoc-code-lang' }, canonical === '' ? 'text' : canonical),
+          h('button', {
+            type: 'button',
+            className: 'dshdoc-code-copy',
+            'data-copied': String(copied),
+            title: copied ? translate('code.copied') : translate('code.copy'),
+            onClick: copy,
+          }, copied ? translate('code.copied') : translate('code.copy')),
+        ),
+        h('pre', { className: 'dshdoc-code-body' },
+          h('code', null, highlightNodes(code, canonical, 'tok'))),
+      )
+    }
+
+    const OUTLINE_LEVEL = 2
+    const REDUCED_MOTION = '(prefers-reduced-motion: reduce)'
+
+    function prefersReducedMotion() {
+      try {
+        return typeof window.matchMedia === 'function' && window.matchMedia(REDUCED_MOTION).matches
+      } catch {
+        return false
+      }
+    }
+
+    /** Heading text as it should read in the outline: inline markers removed. */
+    function headingLabel(raw) {
+      const text = String(raw)
+        .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+        .replace(/`([^`]*)`/g, '$1')
+        .replace(/\*\*([^*]+)\*\*/g, '$1')
+        .replace(/\*([^*]+)\*/g, '$1')
+        .replace(/\s+/g, ' ')
+        .trim()
+      return text === '' ? '—' : text
+    }
+
+    function renderMarkdown(text, t) {
       const lines = String(text || '').replace(/\r\n/g, '\n').split('\n')
       const nodes = []
+      const headings = []
       let index = 0
       let key = 0
+      // The opening H1 is the document title, not a section of its own.
+      let firstHeading = true
       const nextKey = () => `md-${key++}`
       while (index < lines.length) {
         const line = lines[index]
@@ -601,14 +1094,27 @@ window.__ModuleLoader__.load({
             index += 1
           }
           index += 1
-          nodes.push(h('pre', { key: nextKey(), className: 'dshdoc-md-code' },
-            h('code', { 'data-lang': language }, body.join('\n'))))
+          nodes.push(h(CodeBlock, { key: nextKey(), code: body.join('\n'), lang: language, t }))
           continue
         }
         const heading = /^(#{1,6})\s+(.*)$/.exec(line)
         if (heading) {
           const level = heading[1].length
-          nodes.push(h(`h${level}`, { key: nextKey() }, inlineNodes(heading[2], nextKey())))
+          const source = heading[2].trim().replace(/\s+#+\s*$/, '')
+          const documentTitle = firstHeading && level === 1
+          firstHeading = false
+          if (level <= OUTLINE_LEVEL && !documentTitle) {
+            const outlineIndex = headings.length
+            headings.push({ id: `dshdoc-heading-${outlineIndex}`, index: outlineIndex, level, text: headingLabel(source) })
+            nodes.push(h(`h${level}`, {
+              key: nextKey(),
+              id: `dshdoc-heading-${outlineIndex}`,
+              className: 'dshdoc-md-heading',
+              'data-dshdoc-h': String(outlineIndex),
+            }, inlineNodes(source, nextKey())))
+          } else {
+            nodes.push(h(`h${level}`, { key: nextKey() }, inlineNodes(source, nextKey())))
+          }
           index += 1
           continue
         }
@@ -623,9 +1129,16 @@ window.__ModuleLoader__.load({
             items.push(lines[index].replace(/^\s*[-*+]\s+/, ''))
             index += 1
           }
-          nodes.push(h('ul', { key: nextKey() }, items.map((item, itemIndex) => (
-            h('li', { key: `${nextKey()}-${itemIndex}` }, inlineNodes(item, nextKey()))
-          ))))
+          nodes.push(h('ul', { key: nextKey() }, items.map((item, itemIndex) => {
+            const task = /^\[([ xX])\]\s+/.exec(item)
+            if (task === null) {
+              return h('li', { key: `${nextKey()}-${itemIndex}` }, inlineNodes(item, nextKey()))
+            }
+            const done = task[1].toLowerCase() === 'x'
+            return h('li', { key: `${nextKey()}-${itemIndex}`, className: 'dshdoc-md-task', 'data-done': String(done) },
+              h('span', { className: 'dshdoc-md-check', 'aria-hidden': true }, done ? '✓' : ''),
+              h('span', null, inlineNodes(item.slice(task[0].length), nextKey())))
+          })))
           continue
         }
         if (/^\s*\d+\.\s+/.test(line)) {
@@ -689,11 +1202,205 @@ window.__ModuleLoader__.load({
           index += 1
         }
       }
-      return nodes
+      return { nodes, headings }
     }
 
-    function DocumentsPage(props) {
-      const t = typeof props.t === 'function' ? props.t : translateWith(EN)
+    /**
+     * Document outline: a quiet rail in the left gutter that grows into a glass
+     * panel on hover. Entries fade and blur with their distance from the section
+     * currently being read, so the eye lands on the present position first.
+     */
+    function DocOutline({ headings, scrollerRef, docKey, t }) {
+      const [active, setActive] = React.useState(0)
+      const [mode, setMode] = React.useState('hidden')
+      const [railWidth, setRailWidth] = React.useState(150)
+      const [expanded, setExpanded] = React.useState(false)
+      const listRef = React.useRef(null)
+      const collapseTimer = React.useRef(null)
+      const frame = React.useRef(0)
+      const lockUntil = React.useRef(0)
+      const centered = React.useRef(false)
+      const count = headings.length
+
+      const clearCollapse = () => {
+        if (collapseTimer.current !== null) {
+          window.clearTimeout(collapseTimer.current)
+          collapseTimer.current = null
+        }
+      }
+
+      const expand = () => {
+        clearCollapse()
+        setExpanded(true)
+      }
+
+      const collapse = () => {
+        clearCollapse()
+        collapseTimer.current = window.setTimeout(() => {
+          collapseTimer.current = null
+          setExpanded(false)
+        }, 110)
+      }
+
+      React.useEffect(() => () => clearCollapse(), [])
+
+      React.useEffect(() => {
+        centered.current = false
+        setActive(0)
+        setExpanded(false)
+      }, [docKey])
+
+      // Keep the rail inside the gutter: full labels when the gutter affords them,
+      // a bare tick rail when it does not. It never covers the body text at rest.
+      React.useLayoutEffect(() => {
+        const scroller = scrollerRef.current
+        if (scroller === null) return undefined
+        const measure = () => {
+          const doc = scroller.querySelector('.dshdoc-doc')
+          if (doc === null) return
+          const bounds = scroller.getBoundingClientRect()
+          const gutter = doc.getBoundingClientRect().left - bounds.left
+          if (scroller.clientWidth < 520 || gutter < 40) {
+            setMode('hidden')
+            return
+          }
+          if (gutter >= 140) {
+            setMode('full')
+            setRailWidth(Math.round(Math.min(240, gutter - 22)))
+          } else {
+            setMode('compact')
+            setRailWidth(36)
+          }
+        }
+        measure()
+        const observer = new ResizeObserver(measure)
+        observer.observe(scroller)
+        const doc = scroller.querySelector('.dshdoc-doc')
+        if (doc !== null) observer.observe(doc)
+        return () => observer.disconnect()
+      }, [scrollerRef, docKey, count])
+
+      // Scroll spy: the active section is the last heading above the reading line.
+      React.useEffect(() => {
+        const scroller = scrollerRef.current
+        if (scroller === null) return undefined
+        const update = () => {
+          frame.current = 0
+          if (Date.now() < lockUntil.current) return
+          const marks = scroller.querySelectorAll('[data-dshdoc-h]')
+          if (marks.length === 0) return
+          const top = scroller.getBoundingClientRect().top
+          let next = 0
+          for (let cursor = 0; cursor < marks.length; cursor += 1) {
+            if (marks[cursor].getBoundingClientRect().top - top <= 96) next = cursor
+            else break
+          }
+          if (
+            scroller.scrollHeight > scroller.clientHeight + 2
+            && scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2
+          ) {
+            next = marks.length - 1
+          }
+          setActive((previous) => (previous === next ? previous : next))
+        }
+        const onScroll = () => {
+          if (frame.current !== 0) return
+          frame.current = window.requestAnimationFrame(update)
+        }
+        update()
+        scroller.addEventListener('scroll', onScroll, { passive: true })
+        const observer = new ResizeObserver(onScroll)
+        observer.observe(scroller)
+        return () => {
+          scroller.removeEventListener('scroll', onScroll)
+          observer.disconnect()
+          if (frame.current !== 0) {
+            window.cancelAnimationFrame(frame.current)
+            frame.current = 0
+          }
+        }
+      }, [scrollerRef, docKey, count])
+
+      // Keep the active entry near the middle of the rail as the reader moves.
+      React.useLayoutEffect(() => {
+        const list = listRef.current
+        if (list === null) return
+        list.dataset.overflow = String(list.scrollHeight > list.clientHeight + 4)
+        const row = list.querySelector('[data-active="true"]')
+        if (row === null) return
+        const target = row.offsetTop - (list.clientHeight - row.offsetHeight) / 2
+        list.scrollTo({ top: Math.max(0, target), behavior: centered.current && !prefersReducedMotion() ? 'smooth' : 'auto' })
+        centered.current = true
+      }, [active, expanded, mode, count])
+
+      const jumpTo = (outlineIndex) => {
+        const scroller = scrollerRef.current
+        if (scroller === null) return
+        const target = scroller.querySelector(`[data-dshdoc-h="${outlineIndex}"]`)
+        if (target === null) return
+        const top = target.getBoundingClientRect().top
+          - scroller.getBoundingClientRect().top
+          + scroller.scrollTop
+          - 84
+        lockUntil.current = Date.now() + 1000
+        setActive(outlineIndex)
+        scroller.scrollTo({ top: Math.max(0, top), behavior: prefersReducedMotion() ? 'auto' : 'smooth' })
+      }
+
+      return h('div', {
+        className: 'dshdoc-outline',
+        'data-mode': mode,
+      },
+      h('nav', {
+        className: 'dshdoc-outline-panel',
+        'aria-label': t('outline.title'),
+        style: { '--rail-w': `${railWidth}px` },
+        onMouseEnter: expand,
+        onMouseLeave: collapse,
+        onFocus: expand,
+        onBlur: (event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) collapse()
+        },
+      },
+      h('div', { className: 'dshdoc-outline-list', ref: listRef },
+        headings.map((heading, outlineIndex) => {
+          const distance = Math.min(Math.abs(outlineIndex - active), 5)
+          const baseSize = Math.max(9.4, 13 - distance * 0.62)
+          const size = expanded ? baseSize + Math.max(0, 2.2 - distance * 0.55) : baseSize
+          const blur = distance * (expanded ? 0.44 : 0.5)
+          const alpha = expanded ? Math.max(0.22, 1 - distance * 0.15) : Math.max(0.16, 1 - distance * 0.168)
+          return h('button', {
+            key: heading.id,
+            type: 'button',
+            className: 'dshdoc-outline-item',
+            'data-level': String(heading.level),
+            'data-active': String(outlineIndex === active),
+            'aria-current': outlineIndex === active ? 'location' : undefined,
+            title: heading.text,
+            style: {
+              '--size': `${size.toFixed(2)}px`,
+              '--blur': `${blur.toFixed(2)}px`,
+              '--alpha': alpha.toFixed(3),
+            },
+            onClick: () => jumpTo(outlineIndex),
+          },
+          h('span', { className: 'dshdoc-outline-tick', 'aria-hidden': true }),
+          h('span', { className: 'dshdoc-outline-label' }, heading.text))
+        }),
+      )))
+    }
+
+    /** Stable hue per workspace name, so every folder keeps its own colour. */
+    function workspaceHue(name) {
+      const text = String(name || '')
+      let hash = 7
+      for (let index = 0; index < text.length; index += 1) {
+        hash = (hash * 31 + text.charCodeAt(index)) >>> 0
+      }
+      return hash % 360
+    }
+
+    function DocumentsPage(props) {      const t = typeof props.t === 'function' ? props.t : translateWith(EN)
       const jumpToSession = props.jumpToSession
 
       const [documents, setDocuments] = React.useState(() => panelState.documents)
@@ -728,6 +1435,7 @@ window.__ModuleLoader__.load({
       const lastLoaded = React.useRef(0)
       const inFlight = React.useRef(false)
       const previewCache = React.useRef(new Map())
+      const mainRef = React.useRef(null)
       const reloadTimer = React.useRef(null)
       /** Server revision of the list currently on screen; '' forces a full reload. */
       const revision = React.useRef(panelState.revision)
@@ -1007,6 +1715,21 @@ window.__ModuleLoader__.load({
         [documents, viewerPath],
       )
 
+      const selectedPath = selected === null ? '' : selected.path
+      const markdownReading = selected !== null
+        && selected.kind === 'markdown'
+        && preview !== null
+        && preview.loading !== true
+        && preview.ok !== false
+        && preview.supported === true
+
+      // Parsing once per preview keeps outline hover and zoom changes from
+      // walking the whole Markdown source again.
+      const markdownDoc = React.useMemo(
+        () => (markdownReading ? renderMarkdown(String(preview.text || ''), t) : null),
+        [selectedPath, markdownReading, preview, t],
+      )
+
       React.useEffect(() => {
         if (selected === null) {
           setPreview(null)
@@ -1071,7 +1794,7 @@ window.__ModuleLoader__.load({
           const workspaceTitle = doc.rootTitle || t('tree.noWorkspace')
           let workspaceEntry = byWorkspace.get(workspaceTitle)
           if (workspaceEntry === undefined) {
-            workspaceEntry = { key: `w:${workspaceTitle}`, title: workspaceTitle, total: 0, sessions: new Map() }
+            workspaceEntry = { key: `w:${workspaceTitle}`, title: workspaceTitle, total: 0, sessions: new Map(), hue: workspaceHue(workspaceTitle) }
             byWorkspace.set(workspaceTitle, workspaceEntry)
           }
           workspaceEntry.total += 1
@@ -1272,6 +1995,7 @@ window.__ModuleLoader__.load({
       let viewer = null
       if (selected !== null) {
         const scale = zoom / 100
+        const wsHue = workspaceHue(selected.rootTitle)
         const rawUrl = API + '/raw?path=' + encodeURIComponent(selected.path)
         let content
         if (preview === null || preview.loading === true) {
@@ -1281,7 +2005,8 @@ window.__ModuleLoader__.load({
         } else if (selected.kind === 'markdown' && preview.supported === true) {
           content = sourceMode
             ? h('pre', { className: 'dshdoc-doc-pre', style: { fontSize: `${13 * scale}px` } }, preview.text || '')
-            : h('div', { className: 'dshdoc-md', style: { fontSize: `${15 * scale}px` } }, renderMarkdown(preview.text || ''))
+            : h('div', { className: 'dshdoc-md', style: { fontSize: `${15 * scale}px` } },
+              markdownDoc === null ? null : markdownDoc.nodes)
         } else if (preview.supported === true) {
           content = h('pre', { className: 'dshdoc-doc-pre', style: { fontSize: `${13 * scale}px` } }, preview.text || '')
         } else if (selected.kind === 'pdf') {
@@ -1306,6 +2031,15 @@ window.__ModuleLoader__.load({
           )
         }
 
+        const outline = markdownDoc !== null && !sourceMode && markdownDoc.headings.length > 1
+          ? h(DocOutline, {
+            headings: markdownDoc.headings,
+            scrollerRef: mainRef,
+            docKey: selected.path,
+            t,
+          })
+          : null
+
         viewer = h('div', { className: 'dshdoc-main' },
           h('header', { className: 'dshdoc-view-head' },
             h('button', {
@@ -1320,7 +2054,17 @@ window.__ModuleLoader__.load({
               h('div', { style: { minWidth: 0 } },
                 h('div', { className: 'dshdoc-view-name' }, selected.name),
                 h('div', { className: 'dshdoc-view-sub' },
-                  `${t('kind.' + selected.kind)} · ${formatBytes(selected.bytes)} · ${selected.origin ? selected.origin.title : ''}`),
+                  selected.rootTitle !== '' && h('span', {
+                    className: 'dshdoc-ws-dot',
+                    style: { background: `hsl(${wsHue} 62% 48%)` },
+                    'aria-hidden': true,
+                  }),
+                  [
+                    selected.rootTitle,
+                    t('kind.' + selected.kind),
+                    formatBytes(selected.bytes),
+                    selected.origin ? selected.origin.title : '',
+                  ].filter((part) => part !== '' && part !== undefined).join(' · ')),
               ),
             ),
             h('button', {
@@ -1376,7 +2120,9 @@ window.__ModuleLoader__.load({
             }, t('action.open')),
           ),
           h('div', { className: 'dshdoc-view-body' },
-            h('div', { className: 'dshdoc-view-main' }, h('div', { className: 'dshdoc-doc' }, content)),
+            h('div', { className: 'dshdoc-view-main', ref: mainRef },
+              h('div', { className: 'dshdoc-doc' }, content)),
+            outline,
             detailOpen && h('aside', { className: 'dshdoc-detail' },
               h('div', { className: 'dshdoc-detail-head' },
                 h('div', { className: 'dshdoc-section-title' }, t('detail.title')),
@@ -1533,7 +2279,7 @@ window.__ModuleLoader__.load({
             title: editors.length > 0 ? `${t('detail.edited')}: ${editors.join('、')}` : undefined,
           }, t('row.editedElsewhere'))
         })(),
-        h('span', null, t('kind.' + doc.kind)),
+        h('span', { style: { color: `color-mix(in oklab, ${KIND_DOT[doc.kind] || '#5b6472'} 66%, var(--dsw-alias-label-tertiary))` } }, t('kind.' + doc.kind)),
       ),
       )
 
@@ -1541,6 +2287,7 @@ window.__ModuleLoader__.load({
         key: entry.key,
         className: 'dshdoc-group',
         'data-level': level,
+        style: level === 'workspace' ? { '--ws-h': String(entry.hue ?? 248) } : undefined,
       },
       h('button', {
         type: 'button',
