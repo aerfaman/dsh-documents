@@ -1,6 +1,6 @@
 {
   "name": "dsh-documents",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "Session-linked document library for DSH Desktop: in-app Markdown viewer, zoom, provenance and edit history.",
   "type": "module",
   "license": "MIT",
@@ -45,7 +45,8 @@
   "scripts": {
     "check": "node --check index.js && node --check client.js && node scripts/verify.mjs",
     "prepack": "npm run check",
-    "pack:dry": "npm pack --dry-run"
+    "pack:dry": "npm pack --dry-run",
+    "install:local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/local-install.ps1"
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org",

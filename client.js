@@ -20,6 +20,12 @@ window.__ModuleLoader__.load({
       'sort.name': 'Name',
       'sort.size': 'Largest first',
       'workspace.all': 'All workspaces',
+      'tree.expandAll': 'Expand all',
+      'tree.collapseAll': 'Collapse all',
+      'tree.noWorkspace': 'No workspace',
+      'tree.noSession': 'No session',
+      'tree.workspace': 'Workspace',
+      'tree.session': 'Session',
       'loading': 'Loading documents…',
       'loading.partial': 'Still scanning sessions… {count} shown',
       'update.title': 'Version {version} is available',
@@ -56,7 +62,7 @@ window.__ModuleLoader__.load({
       'detail.edited': 'Edited by',
       'detail.jump': 'Open session',
       'detail.noSessions': 'No session recorded.',
-      'detail.eventSeq': 'event',
+      'row.editedElsewhere': 'edited elsewhere',      'detail.eventSeq': 'event',
       'detail.turn': 'turn',
       'detail.events': 'changes',
       'event.write': 'Write',
@@ -104,6 +110,12 @@ window.__ModuleLoader__.load({
       'sort.name': '名称',
       'sort.size': '从大到小',
       'workspace.all': '全部工作区',
+      'tree.expandAll': '全部展开',
+      'tree.collapseAll': '全部收起',
+      'tree.noWorkspace': '未归属工作区',
+      'tree.noSession': '未归属会话',
+      'tree.workspace': '工作区',
+      'tree.session': '会话',
       'loading': '正在加载文档…',
       'loading.partial': '正在继续扫描会话…已显示 {count} 个',
       'update.title': '有新版本 {version}',
@@ -140,6 +152,7 @@ window.__ModuleLoader__.load({
       'detail.edited': '编辑会话',
       'detail.jump': '打开会话',
       'detail.noSessions': '没有记录到会话。',
+      'row.editedElsewhere': '其他会话改过',
       'detail.eventSeq': '事件',
       'detail.turn': '轮次',
       'detail.events': '次变动',
@@ -185,6 +198,32 @@ window.__ModuleLoader__.load({
     }
     const REFRESH_MS = 60 * 1000
     const UPDATE_DISMISS_KEY = 'dsh-documents.update.dismissed'
+    // Folders start collapsed, so what is worth persisting is the *expanded* set.
+    const TREE_EXPANDED_KEY = 'dsh-documents.tree.expanded'
+
+    function readExpanded() {
+      try {
+        const raw = window.localStorage.getItem(TREE_EXPANDED_KEY)
+        const parsed = raw === null ? null : JSON.parse(raw)
+        return new Set(Array.isArray(parsed) ? parsed.filter((entry) => typeof entry === 'string') : [])
+      } catch {
+        return new Set()
+      }
+    }
+
+    /** Survives a remount even when localStorage is unavailable. */
+    const treeState = { expanded: readExpanded() }
+
+    function writeExpanded(value) {
+      treeState.expanded = value
+      try {
+        window.localStorage.setItem(TREE_EXPANDED_KEY, JSON.stringify([...value]))
+        // Older builds stored the inverse set; drop it so it cannot linger.
+        window.localStorage.removeItem('dsh-documents.tree.collapsed')
+      } catch {
+        // Private mode or a blocked storage area: state still holds for this page.
+      }
+    }
     // Survives a remount (switching panels and coming back): the list paints from
     // the last known state and a delta refresh runs behind it.
     const panelState = { documents: [], sessionCount: 0, revision: '' }
@@ -248,6 +287,7 @@ window.__ModuleLoader__.load({
       .dshdoc-meta { display: block; margin-top: 2px; font-size: 12px; line-height: 1.5; color: var(--dsw-alias-label-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .dshdoc-meta span + span::before { content: "·"; margin: 0 6px; color: var(--dsw-alias-label-tertiary); }
       .dshdoc-row-side { flex: none; text-align: right; font-size: 11.5px; color: var(--dsw-alias-label-tertiary); display: flex; flex-direction: column; gap: 2px; align-items: flex-end; }
+      .dshdoc-edited-flag { color: var(--dsw-alias-state-warn-primary); white-space: nowrap; }
       .dshdoc-session-dot { display: inline-block; width: 6px; height: 6px; border-radius: 999px; background: var(--dsw-alias-brand-primary); margin-right: 5px; vertical-align: 1px; }
       .dshdoc-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 40px 24px 80px; text-align: center; }
       .dshdoc-empty-art { color: var(--dsw-alias-label-tertiary); opacity: 0.9; margin-bottom: 4px; }
@@ -289,6 +329,25 @@ window.__ModuleLoader__.load({
       .dshdoc-side-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; padding: 6px 10px 24px 8px; }
       .dshdoc-side .dshdoc-row { padding: 8px 9px; gap: 10px; }
       .dshdoc-side .dshdoc-tile { width: 34px; height: 38px; font-size: 8.5px; }
+      .dshdoc-tree { display: flex; flex-direction: column; gap: 3px; }
+      .dshdoc-group { min-width: 0; }
+      .dshdoc-group-head { display: flex; align-items: center; gap: 6px; width: 100%; padding: 6px 8px; border: 1px solid transparent; border-radius: 9px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; outline: none; }
+      .dshdoc-group-head:hover { background: color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent); }
+      .dshdoc-group-head:focus-visible { border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 55%, transparent); }
+      .dshdoc-group[data-level="session"] > .dshdoc-group-head { padding-left: 18px; }
+      .dshdoc-group-title { flex: 1; min-width: 0; font-size: 12.5px; line-height: 1.45; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .dshdoc-group[data-level="workspace"] > .dshdoc-group-head .dshdoc-group-title { font-weight: 600; }
+      .dshdoc-group[data-level="session"] > .dshdoc-group-head .dshdoc-group-title { color: var(--dsw-alias-label-secondary); }
+      .dshdoc-group-count { flex: none; font-size: 10.5px; padding-left: 4px; color: var(--dsw-alias-label-tertiary); }
+      .dshdoc-caret { flex: none; display: inline-flex; color: var(--dsw-alias-label-tertiary); transition: transform 0.12s ease; }
+      .dshdoc-caret[data-open="true"] { transform: rotate(90deg); }
+      .dshdoc-folder { flex: none; display: inline-flex; color: var(--dsw-alias-label-secondary); }
+      .dshdoc-group[data-level="workspace"] > .dshdoc-group-head .dshdoc-folder { color: var(--dsw-alias-brand-primary); }
+      .dshdoc-group-body { display: flex; flex-direction: column; }
+      .dshdoc-side .dshdoc-row[data-grouped="true"] { padding-left: 26px; }
+      .dshdoc-tree-tools { display: flex; align-items: center; gap: 4px; }
+      .dshdoc-mini { height: 24px; padding: 0 8px; border-radius: 7px; border: 1px solid var(--dshdoc-border); background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; cursor: pointer; white-space: nowrap; }
+      .dshdoc-mini:hover { color: var(--dsw-alias-label-primary); }
       .dshdoc-row[data-selected="true"] { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 9%, transparent); border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 26%, transparent); box-shadow: inset 3px 0 0 var(--dsw-alias-brand-primary); }
       .dshdoc-main { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; background: var(--dsw-alias-bg-base); overflow: hidden; }
       .dshdoc-main-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 40px; text-align: center; color: var(--dsw-alias-label-secondary); font-size: 13px; }
@@ -333,7 +392,10 @@ window.__ModuleLoader__.load({
       .dshdoc-session[data-role="origin"] { border-left-color: var(--dsw-alias-brand-primary); }
       .dshdoc-session[data-role="editor"] { border-left-color: var(--dsw-alias-state-warn-primary); }
       .dshdoc-session + .dshdoc-session { margin-top: 9px; }
-      .dshdoc-session-head { display: flex; align-items: center; gap: 7px; }
+      .dshdoc-session-head { display: flex; align-items: center; gap: 7px; cursor: pointer; border-radius: 7px; outline: none; }
+      .dshdoc-session-head:hover .dshdoc-session-title { color: var(--dsw-alias-brand-primary); }
+      .dshdoc-session-head:focus-visible { box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-brand-primary) 35%, transparent); }
+      .dshdoc-session[data-open="false"] { padding-bottom: 10px; }
       .dshdoc-role { font-size: 9.5px; font-weight: 700; letter-spacing: 0.02em; padding: 2px 6px; border-radius: 5px; flex: none; }
       .dshdoc-role[data-role="origin"] { color: var(--dsw-alias-brand-primary); background: color-mix(in srgb, var(--dsw-alias-brand-primary) 13%, transparent); }
       .dshdoc-role[data-role="editor"] { color: var(--dsw-alias-state-warn-primary); background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 14%, transparent); }
@@ -451,6 +513,24 @@ window.__ModuleLoader__.load({
     function CloseGlyph() {
       return h('svg', { width: 15, height: 15, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': true },
         h('path', { d: 'm4 4 8 8M12 4l-8 8', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round' }),
+      )
+    }
+
+    function CaretGlyph() {
+      return h('svg', { width: 12, height: 12, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': true },
+        h('path', { d: 'M6.2 3.4 11 8l-4.8 4.6', stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round', strokeLinejoin: 'round' }),
+      )
+    }
+
+    function FolderGlyph() {
+      return h('svg', { width: 14, height: 14, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': true },
+        h('path', { d: 'M2 4.4a1.4 1.4 0 0 1 1.4-1.4h2.5l1.4 1.6h5.3A1.4 1.4 0 0 1 14 6v5.6a1.4 1.4 0 0 1-1.4 1.4H3.4A1.4 1.4 0 0 1 2 11.6z', stroke: 'currentColor', strokeWidth: 1.3, strokeLinejoin: 'round' }),
+      )
+    }
+
+    function SessionGlyph() {
+      return h('svg', { width: 14, height: 14, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': true },
+        h('path', { d: 'M2.6 3.9A1.3 1.3 0 0 1 3.9 2.6h8.2a1.3 1.3 0 0 1 1.3 1.3v6.2a1.3 1.3 0 0 1-1.3 1.3H7.4L4.3 14v-2.6H3.9a1.3 1.3 0 0 1-1.3-1.3z', stroke: 'currentColor', strokeWidth: 1.3, strokeLinejoin: 'round' }),
       )
     }
 
@@ -623,11 +703,13 @@ window.__ModuleLoader__.load({
       const [truncated, setTruncated] = React.useState(false)
       const [query, setQuery] = React.useState('')
       const [kind, setKind] = React.useState('all')
-      const [workspace, setWorkspace] = React.useState('all')
       const [sort, setSort] = React.useState('recent')
+      const [expanded, setExpanded] = React.useState(() => treeState.expanded)
       const [viewerPath, setViewerPath] = React.useState(null)
       const [listOpen, setListOpen] = React.useState(false)
       const [detailOpen, setDetailOpen] = React.useState(false)
+      // Session cards in the details panel start collapsed; opening one shows its events.
+      const [openSessions, setOpenSessions] = React.useState(() => new Set())
       const [zoom, setZoom] = React.useState(100)
       const [sourceMode, setSourceMode] = React.useState(false)
       const [preview, setPreview] = React.useState(null)
@@ -951,29 +1033,22 @@ window.__ModuleLoader__.load({
         }
       }, [selected, previewEpoch])
 
-      const workspaces = React.useMemo(() => {
-        const names = new Set()
-        for (const doc of documents) if (doc.rootTitle) names.add(doc.rootTitle)
-        return [...names]
-      }, [documents])
-
       const counts = React.useMemo(() => {
-        const base = workspace === 'all' ? documents : documents.filter((doc) => doc.rootTitle === workspace)
-        const result = { all: base.length }
-        for (const doc of base) result[doc.kind] = (result[doc.kind] || 0) + 1
+        const result = { all: documents.length }
+        for (const doc of documents) result[doc.kind] = (result[doc.kind] || 0) + 1
         return result
-      }, [documents, workspace])
+      }, [documents])
 
       const visible = React.useMemo(() => {
         const needle = query.trim().toLowerCase()
         let list = documents
-        if (workspace !== 'all') list = list.filter((doc) => doc.rootTitle === workspace)
         if (kind !== 'all') list = list.filter((doc) => doc.kind === kind)
         if (needle !== '') {
           list = list.filter((doc) => {
             const sessions = (doc.sessions || []).map((session) => session.title).join(' ')
             return doc.name.toLowerCase().includes(needle)
               || String(doc.rel || '').toLowerCase().includes(needle)
+              || String(doc.rootTitle || '').toLowerCase().includes(needle)
               || sessions.toLowerCase().includes(needle)
           })
         }
@@ -982,7 +1057,64 @@ window.__ModuleLoader__.load({
         else if (sort === 'size') copy.sort((a, b) => b.bytes - a.bytes)
         else copy.sort((a, b) => b.lastTime - a.lastTime)
         return copy
-      }, [documents, query, kind, workspace, sort])
+      }, [documents, query, kind, sort])
+
+      /**
+       * Workspace → session → document, in the order the (already sorted) list
+       * presents them: a workspace folder sits with its most recent session, and
+       * a document lives under the session that created it. Documents edited by
+       * other sessions stay in one place and carry a "shared" marker instead.
+       */
+      const groups = React.useMemo(() => {
+        const byWorkspace = new Map()
+        for (const doc of visible) {
+          const workspaceTitle = doc.rootTitle || t('tree.noWorkspace')
+          let workspaceEntry = byWorkspace.get(workspaceTitle)
+          if (workspaceEntry === undefined) {
+            workspaceEntry = { key: `w:${workspaceTitle}`, title: workspaceTitle, total: 0, sessions: new Map() }
+            byWorkspace.set(workspaceTitle, workspaceEntry)
+          }
+          workspaceEntry.total += 1
+          const origin = doc.origin
+          const sessionKey = origin && origin.sessionId ? String(origin.sessionId) : ''
+          const sessionTitle = origin && origin.title ? origin.title : t('tree.noSession')
+          let sessionEntry = workspaceEntry.sessions.get(sessionKey)
+          if (sessionEntry === undefined) {
+            sessionEntry = { key: `s:${workspaceTitle}\u0000${sessionKey}`, id: sessionKey, title: sessionTitle, docs: [] }
+            workspaceEntry.sessions.set(sessionKey, sessionEntry)
+          }
+          sessionEntry.docs.push(doc)
+        }
+        return [...byWorkspace.values()].map((entry) => ({ ...entry, sessions: [...entry.sessions.values()] }))
+      }, [visible, t])
+
+      const searchActive = query.trim() !== ''
+
+      const toggleGroup = React.useCallback((key) => {
+        setExpanded((previous) => {
+          const next = new Set(previous)
+          if (next.has(key)) next.delete(key)
+          else next.add(key)
+          writeExpanded(next)
+          return next
+        })
+      }, [])
+
+      const collapseAll = React.useCallback(() => {
+        const next = new Set()
+        setExpanded(next)
+        writeExpanded(next)
+      }, [])
+
+      const expandAll = React.useCallback(() => {
+        const next = new Set()
+        for (const workspaceEntry of groups) {
+          next.add(workspaceEntry.key)
+          for (const sessionEntry of workspaceEntry.sessions) next.add(sessionEntry.key)
+        }
+        setExpanded(next)
+        writeExpanded(next)
+      }, [groups])
 
       const runAction = React.useCallback(async (action, doc, extra) => {
         setBusy(true)
@@ -1033,7 +1165,23 @@ window.__ModuleLoader__.load({
         setSourceMode(false)
         setDetailOpen(false)
         setListOpen(false)
+        setOpenSessions(new Set())
       }, [])
+
+      const toggleSession = React.useCallback((sessionId) => {
+        setOpenSessions((previous) => {
+          const next = new Set(previous)
+          if (next.has(sessionId)) next.delete(sessionId)
+          else next.add(sessionId)
+          return next
+        })
+      }, [])
+
+      // A different document starts with every session card collapsed again.
+      const selectedSessionKey = selected === null ? '' : String(selected.path || '')
+      React.useEffect(() => {
+        setOpenSessions(new Set())
+      }, [selectedSessionKey])
 
       const jump = React.useCallback((sessionId, event) => {
         if (typeof jumpToSession !== 'function') {
@@ -1255,19 +1403,44 @@ window.__ModuleLoader__.load({
                   h('span', null, t('detail.sessions')),
                   h('span', { className: 'dshdoc-card-count' }, String((selected.sessions || []).length)),
                 ),
-                (selected.sessions || []).map((session) => h('div', { key: session.id, className: 'dshdoc-session', 'data-role': session.role },
-                  h('div', { className: 'dshdoc-session-head' },
-                    h('span', { className: 'dshdoc-role', 'data-role': session.role }, session.role === 'origin' ? t('detail.created') : t('detail.edited')),
-                    h('span', { className: 'dshdoc-session-title', title: session.title }, session.title),
-                    session.events.length > 0 && h('button', {
-                      type: 'button',
-                      className: 'dshdoc-jump',
-                      onClick: () => jump(session.id, session.events[0]),
-                    }, t('detail.jump')),
+                (selected.sessions || []).map((session) => {
+                  const sessionOpen = openSessions.has(session.id)
+                  const lastEvent = session.events.length > 0 ? session.events[session.events.length - 1] : null
+                  return h('div', {
+                    key: session.id,
+                    className: 'dshdoc-session',
+                    'data-role': session.role,
+                    'data-open': String(sessionOpen),
+                  },
+                  h('div', {
+                    className: 'dshdoc-session-head',
+                    role: 'button',
+                    tabIndex: 0,
+                    'aria-expanded': String(sessionOpen),
+                    title: session.title,
+                    onClick: () => toggleSession(session.id),
+                    onKeyDown: (event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        toggleSession(session.id)
+                      }
+                    },
+                  },
+                  h('span', { className: 'dshdoc-caret', 'data-open': String(sessionOpen) }, h(CaretGlyph, null)),
+                  h('span', { className: 'dshdoc-role', 'data-role': session.role }, session.role === 'origin' ? t('detail.created') : t('detail.edited')),
+                  h('span', { className: 'dshdoc-session-title' }, session.title),
+                  session.events.length > 0 && h('button', {
+                    type: 'button',
+                    className: 'dshdoc-jump',
+                    onClick: (event) => {
+                      event.stopPropagation()
+                      jump(session.id, session.events[0])
+                    },
+                  }, t('detail.jump')),
                   ),
                   h('div', { className: 'dshdoc-session-sub' },
-                    `${session.workspace || ''}${session.workspace ? ' · ' : ''}${session.events.length} ${t('detail.events')}`),
-                  session.events.map((event, eventIndex) => h('div', {
+                    `${session.workspace || ''}${session.workspace ? ' · ' : ''}${session.events.length} ${t('detail.events')}${lastEvent ? ` · ${formatTime(lastEvent.time)}` : ''}`),
+                  sessionOpen && session.events.map((event, eventIndex) => h('div', {
                     key: `${session.id}-${event.seq}-${eventIndex}`,
                     className: 'dshdoc-event',
                     'data-kind': event.kind,
@@ -1286,8 +1459,8 @@ window.__ModuleLoader__.load({
                     }, t('detail.jump')),
                   ),
                   event.preview !== '' && h('pre', { className: 'dshdoc-event-preview' }, event.preview),
-                  )),
-                )),
+                  )))
+                }),
                 (selected.sessions || []).length === 0 && h('div', { className: 'dshdoc-empty-body' }, t('detail.noSessions')),
               ),
               h('div', { className: 'dshdoc-card dshdoc-actions' },
@@ -1328,6 +1501,63 @@ window.__ModuleLoader__.load({
         )
       }
 
+      const renderDocRow = (doc) => h('div', {
+        key: doc.path,
+        className: 'dshdoc-row',
+        role: 'button',
+        tabIndex: 0,
+        'data-grouped': 'true',
+        'aria-label': doc.name,
+        'data-selected': String(doc.path === viewerPath),
+        onClick: () => openViewer(doc),
+        onKeyDown: (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            openViewer(doc)
+          }
+        },
+      },
+      h('span', { className: 'dshdoc-tile', style: tileStyle(doc) }, tileLabel(doc)),
+      h('span', { className: 'dshdoc-row-main' },
+        h('span', { className: 'dshdoc-name' }, doc.name),
+        h('span', { className: 'dshdoc-meta' },
+          h('span', null, formatTime(doc.lastTime)),
+          (doc.sessionCount || 0) > 1 && h('span', null, `${doc.sessionCount} ${t('sessionCount')}`),
+        ),
+      ),
+      h('span', { className: 'dshdoc-row-side' },
+        doc.editedByOthers && (() => {
+          const editors = (doc.sessions || []).filter((session) => session.role !== 'origin').map((session) => session.title)
+          return h('span', {
+            className: 'dshdoc-edited-flag',
+            title: editors.length > 0 ? `${t('detail.edited')}: ${editors.join('、')}` : undefined,
+          }, t('row.editedElsewhere'))
+        })(),
+        h('span', null, t('kind.' + doc.kind)),
+      ),
+      )
+
+      const renderFolder = (entry, level, isOpen, children) => h('div', {
+        key: entry.key,
+        className: 'dshdoc-group',
+        'data-level': level,
+      },
+      h('button', {
+        type: 'button',
+        className: 'dshdoc-group-head',
+        'data-open': String(isOpen),
+        'aria-expanded': String(isOpen),
+        title: entry.title,
+        onClick: () => toggleGroup(entry.key),
+      },
+      h('span', { className: 'dshdoc-caret', 'data-open': String(isOpen) }, h(CaretGlyph, null)),
+      h('span', { className: 'dshdoc-folder' }, level === 'workspace' ? h(FolderGlyph, null) : h(SessionGlyph, null)),
+      h('span', { className: 'dshdoc-group-title' }, entry.title),
+      h('span', { className: 'dshdoc-group-count' }, String(level === 'workspace' ? entry.total : entry.docs.length)),
+      ),
+      isOpen && h('div', { className: 'dshdoc-group-body' }, children),
+      )
+
       let listContent
       if (loading && documents.length === 0) {
         listContent = h('div', { className: 'dshdoc-skeleton' },
@@ -1353,34 +1583,14 @@ window.__ModuleLoader__.load({
           documents.length === 0 && h('div', { className: 'dshdoc-empty-body' }, t('empty.body')),
         )
       } else {
-        listContent = visible.map((doc) => h('div', {
-          key: doc.path,
-          className: 'dshdoc-row',
-          role: 'button',
-          tabIndex: 0,
-          'aria-label': doc.name,
-          'data-selected': String(doc.path === viewerPath),
-          onClick: () => openViewer(doc),
-          onKeyDown: (event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault()
-              openViewer(doc)
-            }
-          },
-        },
-        h('span', { className: 'dshdoc-tile', style: tileStyle(doc) }, tileLabel(doc)),
-        h('span', { className: 'dshdoc-row-main' },
-          h('span', { className: 'dshdoc-name' }, doc.name),
-          h('span', { className: 'dshdoc-meta' },
-            h('span', null, h('span', { className: 'dshdoc-session-dot' }), doc.origin ? doc.origin.title : t('detail.noSessions')),
-            h('span', null, formatTime(doc.lastTime)),
-          ),
-        ),
-        h('span', { className: 'dshdoc-row-side' },
-          doc.editedByOthers && h('span', { style: { color: 'var(--dsw-alias-state-warn-primary)' } }, t('detail.edited')),
-          h('span', null, t('kind.' + doc.kind)),
-        ),
-        ))
+        listContent = h('div', { className: 'dshdoc-tree' }, groups.map((workspaceEntry) => {
+          const workspaceOpen = searchActive || expanded.has(workspaceEntry.key)
+          return renderFolder(workspaceEntry, 'workspace', workspaceOpen,
+            workspaceEntry.sessions.map((sessionEntry) => {
+              const sessionOpen = searchActive || expanded.has(sessionEntry.key)
+              return renderFolder(sessionEntry, 'session', sessionOpen, sessionEntry.docs.map(renderDocRow))
+            }))
+        }))
         if (truncated) {
           listContent = h(React.Fragment, null, listContent,
             h('div', { className: 'dshdoc-empty-body', style: { padding: '14px 12px 0' } }, t('empty.filtered')),
@@ -1425,14 +1635,19 @@ window.__ModuleLoader__.load({
             `${t('kind.' + entry)} ${counts[entry]}`)),
           ),
           h('div', { className: 'dshdoc-side-filters' },
-            workspaces.length > 1 && h('select', {
-              className: 'dshdoc-select',
-              value: workspace,
-              'aria-label': t('workspace.all'),
-              onChange: (event) => setWorkspace(event.target.value),
-            },
-            h('option', { value: 'all' }, t('workspace.all')),
-            workspaces.map((name) => h('option', { key: name, value: name }, name)),
+            h('div', { className: 'dshdoc-tree-tools' },
+              h('button', {
+                type: 'button',
+                className: 'dshdoc-mini',
+                onClick: expandAll,
+                title: t('tree.expandAll'),
+              }, t('tree.expandAll')),
+              h('button', {
+                type: 'button',
+                className: 'dshdoc-mini',
+                onClick: collapseAll,
+                title: t('tree.collapseAll'),
+              }, t('tree.collapseAll')),
             ),
             h('select', {
               className: 'dshdoc-select',
