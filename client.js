@@ -427,11 +427,11 @@ window.__ModuleLoader__.load({
       .dshdoc-outline-list { position: relative; display: flex; flex-direction: column; gap: 1px; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; padding: 2px 0; }
       .dshdoc-outline-list[data-overflow="true"] { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%); }
       .dshdoc-outline-list::-webkit-scrollbar { display: none; }
-      .dshdoc-outline-item { --size: 12px; --blur: 0px; --alpha: 1; display: flex; align-items: center; gap: 8px; width: 100%; height: 24px; box-sizing: border-box; margin: 0; padding: 0 9px 0 7px; border: none; border-radius: 8px; background: transparent; color: color-mix(in srgb, var(--dsw-alias-label-primary) 78%, transparent); font: inherit; font-size: var(--size); line-height: 1.35; text-align: left; cursor: pointer; outline: none; opacity: var(--alpha); filter: blur(var(--blur)); transition: font-size 0.36s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.36s ease, filter 0.36s ease, color 0.2s ease, transform 0.28s cubic-bezier(0.22, 1, 0.36, 1); }
+      .dshdoc-outline-item { --size: 12px; --alpha: 1; display: flex; align-items: center; gap: 8px; width: 100%; height: 24px; box-sizing: border-box; margin: 0; padding: 0 9px 0 7px; border: none; border-radius: 8px; background: transparent; color: color-mix(in srgb, var(--dsw-alias-label-primary) 78%, transparent); font: inherit; font-size: var(--size); line-height: 1.35; text-align: left; cursor: pointer; outline: none; opacity: var(--alpha); transition: font-size 0.36s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.36s ease, color 0.2s ease, transform 0.28s cubic-bezier(0.22, 1, 0.36, 1); }
       .dshdoc-outline-item[data-level="1"] { padding-left: 7px; }
       .dshdoc-outline-item[data-level="2"] { padding-left: 19px; }
       .dshdoc-outline-item[data-active="true"] { color: var(--dsw-alias-brand-primary); font-weight: 600; }
-      .dshdoc-outline-item:hover, .dshdoc-outline-item:focus-visible { opacity: 1; filter: none; color: var(--dsw-alias-label-primary); font-size: calc(var(--size) + 1.4px); transform: translateX(2px); transition-duration: 0.18s; }
+      .dshdoc-outline-item:hover, .dshdoc-outline-item:focus-visible { opacity: 1; color: var(--dsw-alias-label-primary); font-size: calc(var(--size) + 1.4px); transform: translateX(2px); transition-duration: 0.18s; }
       .dshdoc-outline-item[data-active="true"]:hover, .dshdoc-outline-item[data-active="true"]:focus-visible { color: var(--dsw-alias-brand-primary); }
       .dshdoc-outline-item:focus-visible { box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-brand-primary) 38%, transparent); }
       .dshdoc-outline-tick { flex: none; width: 11px; height: 1.5px; border-radius: 2px; background: currentColor; opacity: 0.5; transition: width 0.34s cubic-bezier(0.22, 1, 0.36, 1), height 0.34s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.28s ease, box-shadow 0.3s ease; }
@@ -1206,9 +1206,9 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Document outline: a quiet rail in the left gutter that grows into a glass
-     * panel on hover. Entries fade and blur with their distance from the section
-     * currently being read, so the eye lands on the present position first.
+     * Document outline: a quiet rail in the left gutter. Entries shrink and fade
+     * with their distance from the section currently being read, so the eye
+     * lands on the present position first.
      */
     function DocOutline({ headings, scrollerRef, docKey, t }) {
       const [active, setActive] = React.useState(0)
@@ -1367,7 +1367,6 @@ window.__ModuleLoader__.load({
           const distance = Math.min(Math.abs(outlineIndex - active), 5)
           const baseSize = Math.max(9.4, 13 - distance * 0.62)
           const size = expanded ? baseSize + Math.max(0, 2.2 - distance * 0.55) : baseSize
-          const blur = distance * (expanded ? 0.44 : 0.5)
           const alpha = expanded ? Math.max(0.22, 1 - distance * 0.15) : Math.max(0.16, 1 - distance * 0.168)
           return h('button', {
             key: heading.id,
@@ -1379,7 +1378,6 @@ window.__ModuleLoader__.load({
             title: heading.text,
             style: {
               '--size': `${size.toFixed(2)}px`,
-              '--blur': `${blur.toFixed(2)}px`,
               '--alpha': alpha.toFixed(3),
             },
             onClick: () => jumpTo(outlineIndex),
@@ -1883,6 +1881,16 @@ window.__ModuleLoader__.load({
       }, [showToast, t])
 
       const openViewer = React.useCallback((doc) => {
+        // Each document opens at its own top: the previous reading offset must
+        // not leak into the next document's outline or scroll position. The
+        // inline override skips the reader's smooth-scroll behavior.
+        const scroller = mainRef.current
+        if (scroller !== null) {
+          const inlineBehavior = scroller.style.scrollBehavior
+          scroller.style.scrollBehavior = 'auto'
+          scroller.scrollTop = 0
+          window.requestAnimationFrame(() => { scroller.style.scrollBehavior = inlineBehavior })
+        }
         setViewerPath(doc.path)
         setZoom(100)
         setSourceMode(false)
@@ -2033,6 +2041,7 @@ window.__ModuleLoader__.load({
 
         const outline = markdownDoc !== null && !sourceMode && markdownDoc.headings.length > 1
           ? h(DocOutline, {
+            key: selected.path,
             headings: markdownDoc.headings,
             scrollerRef: mainRef,
             docKey: selected.path,
